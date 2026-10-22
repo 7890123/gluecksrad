@@ -8,7 +8,7 @@
     podman rm -f gluecksrad gluecksrad-v2 2>/dev/null
     systemctl --user disable --now gluecksrad 2>/dev/null
 
-    # 3) Quadlet installieren (vorher <GITHUB-USER> eintragen)
+    # 3) Quadlet installieren (vorher 7890123 eintragen)
     mkdir -p ~/.config/containers/systemd
     cp gluecksrad.container ~/.config/containers/systemd/
     systemctl --user daemon-reload
@@ -26,7 +26,7 @@
 
 Nur bei privatem Image zusätzlich (Token mit Recht `read:packages`):
 
-    podman login ghcr.io -u <GITHUB-USER>
+    podman login ghcr.io -u 7890123
 
 ## Nützlich
 
@@ -34,5 +34,5 @@ Nur bei privatem Image zusätzlich (Token mit Recht `read:packages`):
     podman auto-update                    # sofort aktualisieren
     journalctl --user -u gluecksrad -n 50 # Logs
     # Zurück auf eine bestimmte Version:
-    #   Image=ghcr.io/<GITHUB-USER>/gluecksrad:<commit-sha> in der .container-Datei, dann
+    #   Image=ghcr.io/7890123/gluecksrad:<commit-sha> in der .container-Datei, dann
     #   systemctl --user daemon-reload && systemctl --user restart gluecksrad

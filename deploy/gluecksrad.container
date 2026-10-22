@@ -6,8 +6,8 @@ Wants=network-online.target
 After=network-online.target
 
 [Container]
-# <GITHUB-USER> durch deinen GitHub-Benutzernamen in Kleinbuchstaben ersetzen
-Image=ghcr.io/<GITHUB-USER>/gluecksrad:latest
+# 7890123 durch deinen GitHub-Benutzernamen in Kleinbuchstaben ersetzen
+Image=ghcr.io/7890123/gluecksrad:latest
 ContainerName=gluecksrad
 AutoUpdate=registry
 PublishPort=8080:8080
