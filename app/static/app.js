@@ -131,7 +131,7 @@ function renderWheelTab() {
       <div class="glass wheelcard">
         <div class="wheel" id="wheelBox"><div class="glow"></div>
           <canvas id="wheel" width="1100" height="1100"></canvas>${POINTER_SVG}
-          <button class="hub" id="hub" title="Drehen (Leertaste)">DREH</button>
+          <button class="hub" id="hub" title="Drehen (Leertaste)"><img src="logo.png" alt="Drehen"></button>
         </div>
         <div class="controls">
           <button class="btn" id="shuffleBtn" title="Reihenfolge im Rad zufällig mischen">🎲 Mischen</button>
@@ -162,6 +162,7 @@ function renderWheelTab() {
       </div>
     </div>`;
   drawWheel();
+  setHub(hubAngle);
   setControls();
   $("#spin").onclick = $("#hub").onclick = spin;
   $("#shuffleBtn").onclick = shuffle;
@@ -208,7 +209,7 @@ function rimLayer(W, pattern) {
   if (rimCache[key]) return rimCache[key];
   const cv = mkCanvas(W), ctx = cv.getContext("2d"), { cx, cy, Rrim } = GEOM(W);
   const rim = ctx.createLinearGradient(0, 0, W, W);
-  rim.addColorStop(0, "#3a2f7a"); rim.addColorStop(.5, "#1a1640"); rim.addColorStop(1, "#4b2a8a");
+  rim.addColorStop(0, "#0a5ea8"); rim.addColorStop(.5, "#06264a"); rim.addColorStop(1, "#0b4f8f");
   ctx.beginPath(); ctx.arc(cx, cy, Rrim, 0, TAU); ctx.fillStyle = rim; ctx.fill();
   ctx.lineWidth = 3; ctx.strokeStyle = "rgba(255,255,255,.25)"; ctx.stroke();
   const bulbs = 28;
@@ -216,9 +217,10 @@ function rimLayer(W, pattern) {
     const on = pattern === "all" ? true : pattern.startsWith("p2") ? (i + +pattern[3]) % 2 === 0 : (i + +pattern[3]) % 3 === 0;
     const ang = i / bulbs * TAU, x = cx + Math.cos(ang) * (Rrim - 23), y = cy + Math.sin(ang) * (Rrim - 23);
     const g = ctx.createRadialGradient(x, y, 0, x, y, 16);
-    g.addColorStop(0, on ? "rgba(255,247,200,1)" : "rgba(255,255,255,.25)");
-    g.addColorStop(.45, on ? "rgba(255,210,90,.9)" : "rgba(255,255,255,.08)");
-    g.addColorStop(1, "rgba(255,200,80,0)");
+    const bc = ["152,193,15", "235,100,32", "120,190,255"][i % 3];       // Logo-Farben als Lämpchen
+    g.addColorStop(0, on ? "rgba(255,255,240,1)" : "rgba(255,255,255,.25)");
+    g.addColorStop(.45, on ? `rgba(${bc},.95)` : "rgba(255,255,255,.08)");
+    g.addColorStop(1, `rgba(${bc},0)`);
     ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, 16, 0, TAU); ctx.fill();
   }
   return (rimCache[key] = cv);
@@ -365,6 +367,7 @@ function spin() {
     safe(() => { Sound.rollStop(); Sound.spinStop(); });
     state.rotation = ((ang % TAU) + TAU) % TAU; state.spinning = false; state.pointerKick = 0;
     const bx = $("#wheelBox"); if (bx) bx.classList.remove("spinning");
+    hubWobble();
     if (!state.current || state.current.id !== classId || state.current.subject !== subjId) { setControls(); return; }
     const pos = pointerIndex(state.rotation, n);
     state.winnerPos = pos; state.pendingRating = true;
@@ -378,6 +381,7 @@ function spin() {
     try {
       const speed = Math.min(1, Math.abs(ang - lastAng) / (1 / 60) / mo.vmax);
       lastAng = ang; state.rotation = ang;
+      setHub(-ang * 180 / Math.PI * 1.7);
       safe(() => Sound.spinSpeed(speed));
       const idx = pointerIndex(ang, n);
       if (idx !== lastIdx) { lastIdx = idx; safe(() => Sound.tick(speed)); state.pointerKick = -14 - 14 * (1 - speed); }
@@ -388,6 +392,19 @@ function spin() {
     } catch (e) { console.warn(e); }
     if (t < mo.total) requestAnimationFrame(frame); else finish(ang);
   })(t0);
+}
+// Logo in der Radmitte: Propeller-Effekt
+let hubAngle = 0;
+function setHub(deg) {
+  hubAngle = deg % 360;
+  const img = document.querySelector("#hub img"); if (img) img.style.transform = `rotate(${hubAngle}deg)`;
+}
+function hubWobble() {
+  const hub = $("#hub"); if (!hub) return;
+  hub.style.setProperty("--a", hubAngle + "deg");
+  const img = hub.querySelector("img"); if (img) img.style.transform = "";
+  hub.classList.remove("wobble"); void hub.offsetWidth; hub.classList.add("wobble");
+  setTimeout(() => { hub.classList.remove("wobble"); setHub(hubAngle); }, 1150);
 }
 function animateWinner() {
   const loop = () => { if (state.winnerPos === null || state.spinning) return; drawWheel(); requestAnimationFrame(loop); };
@@ -464,7 +481,7 @@ document.addEventListener("keydown", e => {
 const cf = $("#confetti"), cfx = cf.getContext("2d"); let parts = [], cfRunning = false;
 function confetti(count = 120, origin) {
   cf.width = innerWidth * devicePixelRatio; cf.height = innerHeight * devicePixelRatio;
-  const cols = ["#7c5cff", "#22d3ee", "#34d399", "#fbbf24", "#fb7185", "#ffffff"];
+  const cols = ["#0062ab", "#98c10f", "#eb6420", "#2b8ad8", "#c3e05a", "#ffffff"];
   for (let i = 0; i < count; i++) {
     const o = origin || { x: rand(0, innerWidth), y: -20 };
     const ang = origin ? rand(0, TAU) : rand(Math.PI * .35, Math.PI * .65), sp = origin ? rand(4, 13) : rand(2, 6);
@@ -627,6 +644,11 @@ $("#newclass").onsubmit = async e => {
   state.view = "classes"; await loadClasses(); state.tab = "students"; openClass(c.id);
 };
 addEventListener("resize", () => drawWheel());
+// Easter Egg: Logo in der Seitenleiste anklicken
+$("#sideLogo").onclick = () => {
+  const l = $("#sideLogo"); l.classList.remove("whirl"); void l.offsetWidth; l.classList.add("whirl");
+  safe(() => { Sound.unlock(); Sound.shuffle(); });
+};
 
 /* ---------------- Teamteaching: Klasse teilen ---------------- */
 async function leaveClass() {

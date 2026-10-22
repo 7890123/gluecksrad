@@ -6,12 +6,15 @@
 <title>Glücksrad – Klassen</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="icon" type="image/png" href="favicon.png">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <div class="auth" id="authScreen" hidden>
   <form class="glass authcard" id="authForm">
-    <div class="brand" style="justify-content:center"><div class="logo"><span></span></div>Glücksrad</div>
+    <div class="authlogo"><img src="logo.png" alt=""></div>
+    <div class="brand" style="justify-content:center">Glücksrad</div>
+    <div class="tagline">Wer ist dran?</div>
     <div class="muted" id="authHint" style="text-align:center;margin:6px 0 18px">Bitte anmelden</div>
     <label class="label" for="authUser">Benutzername</label>
     <input type="text" id="authUser" autocomplete="username" required>
@@ -25,7 +28,7 @@
 </div>
 <div class="app" id="appRoot" hidden>
   <aside class="glass">
-    <div class="brand"><div class="logo"><span></span></div>Glücksrad</div>
+    <div class="brand"><img class="logo" id="sideLogo" src="logo.png" alt="" title="Nicht so fest drücken!">Glücksrad</div>
     <div class="label">Klassen</div>
     <ul class="classlist" id="classlist"></ul>
     <form id="newclass" class="row">
