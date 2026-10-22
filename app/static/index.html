@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="de" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Glücksrad – Klassen</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="auth" id="authScreen" hidden>
+  <form class="glass authcard" id="authForm">
+    <div class="brand" style="justify-content:center"><div class="logo"><span></span></div>Glücksrad</div>
+    <div class="muted" id="authHint" style="text-align:center;margin:6px 0 18px">Bitte anmelden</div>
+    <label class="label" for="authUser">Benutzername</label>
+    <input type="text" id="authUser" autocomplete="username" required>
+    <label class="label" for="authPw" style="margin-top:12px">Passwort</label>
+    <input type="password" id="authPw" autocomplete="current-password" required>
+    <div id="authPw2Wrap" hidden><label class="label" for="authPw2" style="margin-top:12px">Passwort wiederholen</label>
+    <input type="password" id="authPw2" autocomplete="new-password"></div>
+    <div class="autherr" id="authErr"></div>
+    <button class="btn primary" style="width:100%;margin-top:8px;padding:12px" id="authBtn">Anmelden</button>
+  </form>
+</div>
+<div class="app" id="appRoot" hidden>
+  <aside class="glass">
+    <div class="brand"><div class="logo"><span></span></div>Glücksrad</div>
+    <div class="label">Klassen</div>
+    <ul class="classlist" id="classlist"></ul>
+    <form id="newclass" class="row">
+      <input type="text" id="newclassname" placeholder="Neue Klasse, z. B. 3B" required>
+      <button class="btn primary icon" title="Klasse anlegen">＋</button>
+    </form>
+    <div class="userbox">
+      <div class="row"><div class="avatar sm" id="meAvatar"></div><div style="flex:1;min-width:0"><b id="meName"></b><div class="muted" id="meRole" style="font-size:12px"></div></div></div>
+      <div class="row" style="flex-wrap:wrap">
+        <button class="btn ghost icon" id="soundBtn" title="Ton an/aus">🔊</button>
+        <button class="btn ghost icon" id="soundSetBtn" title="Sound-Einstellungen">🎵</button>
+        <button class="btn ghost icon" id="themeBtn" title="Hell/Dunkel">🌙</button>
+        <button class="btn ghost icon" id="usersBtn" title="Benutzerverwaltung" hidden>👥</button>
+        <button class="btn ghost icon" id="pwBtn" title="Passwort ändern">🔑</button>
+        <button class="btn ghost icon" id="logoutBtn" title="Abmelden">⏻</button>
+      </div>
+    </div>
+  </aside>
+  <main id="main"><div class="glass empty muted">Lege links eine Klasse an oder wähle eine aus.</div></main>
+</div>
+
+<dialog id="rateDlg">
+  <div class="winner">
+    <div class="avatar" id="winAvatar"></div>
+    <div class="muted">Gezogen wurde</div>
+    <div class="name" id="winnerName"></div>
+  </div>
+  <div class="label" style="text-align:center">Leistung bewerten</div>
+  <div class="scorebig" id="scoreBig">60 %</div>
+  <input type="range" id="scoreRange" min="0" max="100" step="5" value="60">
+  <div class="quick" id="quick"></div>
+  <div class="result" id="resultBox"></div>
+  <div class="actions">
+    <button class="btn ghost" id="skipBtn">Überspringen<span class="kbd">Esc</span></button>
+    <button class="btn primary" id="saveBtn">Bewertung speichern<span class="kbd">Enter</span></button>
+  </div>
+</dialog>
+
+<dialog id="pwDlg">
+  <form id="pwForm">
+    <h3 style="margin-top:0">Passwort ändern</h3>
+    <label class="label">Aktuelles Passwort</label><input type="password" id="pwOld" autocomplete="current-password" required>
+    <label class="label" style="display:block;margin-top:10px">Neues Passwort (min. 8 Zeichen)</label><input type="password" id="pwNew" autocomplete="new-password" minlength="8" required>
+    <label class="label" style="display:block;margin-top:10px">Neues Passwort wiederholen</label><input type="password" id="pwNew2" autocomplete="new-password" required>
+    <div class="actions" style="margin-top:18px"><button type="button" class="btn ghost" id="pwCancel">Abbrechen</button><button class="btn primary">Speichern</button></div>
+  </form>
+</dialog>
+
+<dialog id="shareDlg">
+  <h3 style="margin-top:0">Teamteaching</h3>
+  <div id="shareBody"></div>
+  <div class="actions" style="margin-top:18px;justify-content:flex-end"><button class="btn primary" id="shareClose">Fertig</button></div>
+</dialog>
+
+<dialog id="soundDlg">
+  <h3 style="margin-top:0">Sound-Einstellungen</h3>
+  <div id="soundBody"></div>
+  <div class="actions" style="margin-top:18px;justify-content:flex-end"><button class="btn primary" id="soundClose">Fertig</button></div>
+</dialog>
+
+<canvas id="confetti"></canvas>
+<div class="toast" id="toast"></div>
+<script src="sound.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

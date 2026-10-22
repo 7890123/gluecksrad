@@ -1,0 +1,29 @@
+# Podman Quadlet – Glücksrad mit automatischen Updates aus ghcr.io
+# Ablage (rootless): ~/.config/containers/systemd/gluecksrad.container
+[Unit]
+Description=Glücksrad für Schulklassen
+Wants=network-online.target
+After=network-online.target
+
+[Container]
+# <GITHUB-USER> durch deinen GitHub-Benutzernamen in Kleinbuchstaben ersetzen
+Image=ghcr.io/<GITHUB-USER>/gluecksrad:latest
+ContainerName=gluecksrad
+AutoUpdate=registry
+PublishPort=8080:8080
+# Falls im LXC kein /dev/net/tun verfügbar ist, stattdessen:
+# Network=host
+Volume=%h/gluecksrad-data:/data:Z
+Environment=COOKIE_SECURE=0
+HealthCmd=python -c "import urllib.request;urllib.request.urlopen('http://localhost:8080/api/auth/status')"
+HealthInterval=30s
+# Ab Podman 5: Dienst gilt erst als gestartet, wenn der Healthcheck ok ist –
+# dann rollt auto-update bei einer kaputten Version automatisch zurück.
+# Notify=healthy
+
+[Service]
+Restart=always
+TimeoutStartSec=300
+
+[Install]
+WantedBy=default.target

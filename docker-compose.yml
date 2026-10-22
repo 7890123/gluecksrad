@@ -1,0 +1,17 @@
+services:
+  gluecksrad:
+    build: .
+    container_name: gluecksrad-v2
+    ports:
+      - "8080:8080"
+    volumes:
+      # SQLite-Datenbank liegt als Datei in ./data/gluecksrad.db
+      # :Z ist für SELinux (Fedora/RHEL) nötig, schadet auf anderen Systemen nicht
+      - ./data:/data:Z
+    environment:
+      # Optional: erstes Admin-Konto automatisch anlegen (sonst Einrichtung im Browser)
+      # ADMIN_USER: admin
+      # ADMIN_PASSWORD: bitte-aendern
+      # Auf 1 setzen, wenn die App hinter HTTPS (Reverse Proxy) läuft
+      COOKIE_SECURE: "0"
+    restart: unless-stopped
