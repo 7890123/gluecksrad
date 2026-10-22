@@ -1,38 +1,39 @@
-# Server einrichten (einmalig, im LXC als normaler Benutzer)
+# Server einrichten (einmalig, im LXC als root)
 
-    # 1) Alten Container stoppen (damit die Datenbank in Ruhe kopiert werden kann)
-    systemctl --user stop gluecksrad 2>/dev/null
+Im eigenen LXC ist rootful Podman am einfachsten: kein Home-Verzeichnis, kein Linger,
+und das Netzwerk läuft über netavark (kein pasta / /dev/net/tun nötig).
+
+    sudo -i
+
+    # 1) Alte Container stoppen (rootless + rootful)
     podman rm -f gluecksrad gluecksrad-v2 2>/dev/null
 
-    # 2) Daten übernehmen (podman unshare, weil die Dateien der Container-uid gehören)
-    mkdir -p ~/gluecksrad-data
-    podman unshare cp -a /opt/wheel/glucksradv2/glucksradv2/data/. ~/gluecksrad-data/
+    # 2) Daten übernehmen
+    mkdir -p /srv/gluecksrad/data
+    cp -a /opt/wheel/glucksradv2/glucksradv2/data/. /srv/gluecksrad/data/
 
-    # 3) Quadlet installieren (vorher 7890123 eintragen)
-    mkdir -p ~/.config/containers/systemd
-    cp gluecksrad.container ~/.config/containers/systemd/
-    systemctl --user daemon-reload
-    systemctl --user start gluecksrad
+    # 3) Dienst einrichten
+    mkdir -p /etc/containers/systemd
+    curl -fsSL https://raw.githubusercontent.com/7890123/gluecksrad/main/deploy/gluecksrad.container \
+      -o /etc/containers/systemd/gluecksrad.container
+    systemctl daemon-reload
+    systemctl start gluecksrad
 
     # 4) Automatische Updates alle 15 Minuten
-    mkdir -p ~/.config/systemd/user/podman-auto-update.timer.d
+    mkdir -p /etc/systemd/system/podman-auto-update.timer.d
     printf '[Timer]\nOnCalendar=\nOnCalendar=*:0/15\nRandomizedDelaySec=60\n' \
-      > ~/.config/systemd/user/podman-auto-update.timer.d/override.conf
-    systemctl --user daemon-reload
-    systemctl --user enable --now podman-auto-update.timer
+      > /etc/systemd/system/podman-auto-update.timer.d/override.conf
+    systemctl daemon-reload
+    systemctl enable --now podman-auto-update.timer
 
-    # 5) Läuft auch ohne Anmeldung / nach Neustart
-    loginctl enable-linger $USER
+## Prüfen / Nützliches
 
-Nur bei privatem Image zusätzlich (Token mit Recht `read:packages`):
-
-    podman login ghcr.io -u 7890123
-
-## Nützlich
-
-    podman auto-update --dry-run          # gibt es ein Update?
+    systemctl status gluecksrad --no-pager
+    journalctl -u gluecksrad -n 50        # Logs
+    podman auto-update --dry-run          # steht ein Update an?
     podman auto-update                    # sofort aktualisieren
-    journalctl --user -u gluecksrad -n 50 # Logs
-    # Zurück auf eine bestimmte Version:
-    #   Image=ghcr.io/7890123/gluecksrad:<commit-sha> in der .container-Datei, dann
-    #   systemctl --user daemon-reload && systemctl --user restart gluecksrad
+    systemctl list-timers podman-auto-update.timer
+
+Zurück auf eine bestimmte Version: in `/etc/containers/systemd/gluecksrad.container`
+`Image=ghcr.io/7890123/gluecksrad:<commit-sha>` setzen, dann
+`systemctl daemon-reload && systemctl restart gluecksrad`.
