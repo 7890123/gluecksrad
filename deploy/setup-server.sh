@@ -3,7 +3,7 @@
 # Aufruf:  sudo bash setup-server.sh  [alter-data-ordner]
 set -euo pipefail
 
-OLD_DATA="${1:-/opt/wheel/glucksradv2/glucksradv2/data}"
+OLD_DATA="${1:-}"
 DATA=/srv/gluecksrad/data
 RAW=https://raw.githubusercontent.com/7890123/gluecksrad/main/deploy
 
@@ -26,7 +26,17 @@ echo "2) Daten nach $DATA"
 mkdir -p "$DATA"
 if [ -f "$DATA/gluecksrad.db" ]; then
   echo "   $DATA/gluecksrad.db existiert schon – wird nicht überschrieben"
-elif [ -d "$OLD_DATA" ]; then
+else
+  if [ -z "$OLD_DATA" ]; then
+    # bisherige Datenbank suchen (neueste zuerst)
+    OLD_DB=$(find / -xdev \( -path /proc -o -path /sys -o -path "$DATA" \) -prune -o \
+             -name gluecksrad.db -type f -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-)
+    [ -n "$OLD_DB" ] && OLD_DATA=$(dirname "$OLD_DB")
+  fi
+fi
+if [ -f "$DATA/gluecksrad.db" ]; then
+  :
+elif [ -n "$OLD_DATA" ] && [ -d "$OLD_DATA" ]; then
   cp -a "$OLD_DATA"/. "$DATA"/ && echo "   übernommen aus $OLD_DATA"
 else
   echo "   kein alter Datenordner gefunden – starte mit leerer Datenbank"
@@ -47,7 +57,12 @@ fi
 
 echo "4) Image laden und starten (beim ersten Mal ca. 1 Minute)"
 podman pull -q ghcr.io/7890123/gluecksrad:latest >/dev/null
-systemctl restart gluecksrad
+if ! systemctl restart gluecksrad; then
+  echo; echo "Start fehlgeschlagen. Diagnose:"
+  echo "--- Port 8080 belegt von:"; ss -tlnp 2>/dev/null | grep ':8080 ' || echo "(frei)"
+  echo "--- Logs:"; journalctl -u gluecksrad -n 40 --no-pager
+  exit 1
+fi
 systemctl enable --now podman-auto-update.timer >/dev/null
 
 echo -n "5) Warte auf die App "
