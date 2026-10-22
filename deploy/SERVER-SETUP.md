@@ -1,12 +1,12 @@
 # Server einrichten (einmalig, im LXC als normaler Benutzer)
 
-    # 1) Daten übernehmen (bisheriger data-Ordner)
-    mkdir -p ~/gluecksrad-data
-    cp -a /opt/wheel/glucksradv2/glucksradv2/data/. ~/gluecksrad-data/
-
-    # 2) Alten Container stoppen
+    # 1) Alten Container stoppen (damit die Datenbank in Ruhe kopiert werden kann)
+    systemctl --user stop gluecksrad 2>/dev/null
     podman rm -f gluecksrad gluecksrad-v2 2>/dev/null
-    systemctl --user disable --now gluecksrad 2>/dev/null
+
+    # 2) Daten übernehmen (podman unshare, weil die Dateien der Container-uid gehören)
+    mkdir -p ~/gluecksrad-data
+    podman unshare cp -a /opt/wheel/glucksradv2/glucksradv2/data/. ~/gluecksrad-data/
 
     # 3) Quadlet installieren (vorher 7890123 eintragen)
     mkdir -p ~/.config/containers/systemd
