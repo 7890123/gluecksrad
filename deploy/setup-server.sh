@@ -1,6 +1,8 @@
 #!/bin/bash
 # Einmalige Einrichtung des Glücksrads auf dem Server (rootful Podman + Quadlet + Auto-Update).
-# Aufruf:  sudo bash setup-server.sh  [alter-data-ordner]
+# Aufruf:  sudo bash setup-server.sh                  -> neue, leere Datenbank (bzw. vorhandene weiterverwenden)
+#          sudo bash setup-server.sh /pfad/zu/data    -> optional bestehende Daten übernehmen
+# Das Skript kann gefahrlos mehrfach ausgeführt werden.
 set -euo pipefail
 
 OLD_DATA="${1:-}"
@@ -22,24 +24,21 @@ for u in $(awk -F: '$3>=1000 && $3<65000 {print $1}' /etc/passwd); do
   runuser -u "$u" -- podman rm -f gluecksrad gluecksrad-v2 >/dev/null 2>&1 || true
 done
 
-echo "2) Daten nach $DATA"
+echo "2) Datenordner $DATA"
 mkdir -p "$DATA"
-if [ -f "$DATA/gluecksrad.db" ]; then
-  echo "   $DATA/gluecksrad.db existiert schon – wird nicht überschrieben"
-else
-  if [ -z "$OLD_DATA" ]; then
-    # bisherige Datenbank suchen (neueste zuerst)
-    OLD_DB=$(find / -xdev \( -path /proc -o -path /sys -o -path "$DATA" \) -prune -o \
-             -name gluecksrad.db -type f -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-)
-    [ -n "$OLD_DB" ] && OLD_DATA=$(dirname "$OLD_DB")
+if [ -n "$OLD_DATA" ]; then
+  # optional: bestehende Daten übernehmen  ->  sudo bash setup-server.sh /pfad/zum/alten/data
+  if [ -f "$DATA/gluecksrad.db" ]; then
+    echo "   $DATA/gluecksrad.db existiert schon – Übernahme übersprungen (nichts überschrieben)"
+  elif [ -f "$OLD_DATA/gluecksrad.db" ] || [ -f "$OLD_DATA/data.json" ]; then
+    cp -a "$OLD_DATA"/. "$DATA"/ && echo "   Daten übernommen aus $OLD_DATA"
+  else
+    echo "   FEHLER: in $OLD_DATA liegt keine gluecksrad.db"; exit 1
   fi
-fi
-if [ -f "$DATA/gluecksrad.db" ]; then
-  :
-elif [ -n "$OLD_DATA" ] && [ -d "$OLD_DATA" ]; then
-  cp -a "$OLD_DATA"/. "$DATA"/ && echo "   übernommen aus $OLD_DATA"
+elif [ -f "$DATA/gluecksrad.db" ]; then
+  echo "   bestehende Datenbank wird weiterverwendet"
 else
-  echo "   kein alter Datenordner gefunden – starte mit leerer Datenbank"
+  echo "   neue, leere Datenbank (Admin-Konto beim ersten Aufruf im Browser anlegen)"
 fi
 
 echo "3) Dienst einrichten"
