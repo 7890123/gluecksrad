@@ -15,9 +15,7 @@ PublishPort=8080:8080
 # Network=host
 Volume=/srv/gluecksrad/data:/data:Z
 Environment=COOKIE_SECURE=0
-HealthCmd=python -c "import urllib.request;urllib.request.urlopen('http://localhost:8080/api/auth/status')"
-HealthInterval=30s
-# Ab Podman 5: Dienst gilt erst als gestartet, wenn der Healthcheck ok ist –
+# Healthcheck kommt aus dem Image. Ab Podman 5: Dienst gilt erst als gestartet, wenn der Healthcheck ok ist –
 # dann rollt auto-update bei einer kaputten Version automatisch zurück.
 # Notify=healthy
 
