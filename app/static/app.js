@@ -45,6 +45,7 @@ async function openClass(id, subjectId) {
 }
 function setCurrent(c) {
   state.current = c;
+  $("#mTitle").textContent = c ? c.name : "Glücksrad";
   store.set("lastSubject:" + c.id, c.subject);
   const s = state.classes.find(x => x.id === c.id);
   if (s) { s.students = c.students.length; s.subjects = c.subjects.length; }
@@ -644,6 +645,23 @@ $("#newclass").onsubmit = async e => {
   state.view = "classes"; await loadClasses(); state.tab = "students"; openClass(c.id);
 };
 addEventListener("resize", () => drawWheel());
+
+/* ---------------- Handy: Menü, Installation, Service Worker ---------------- */
+const closeDrawer = () => document.body.classList.remove("drawer");
+$("#menuBtn").onclick = () => document.body.classList.toggle("drawer");
+$("#scrim").onclick = closeDrawer;
+$("#classlist").addEventListener("click", e => { if (e.target.closest("li[data-id]")) closeDrawer(); });
+$("#usersBtn").addEventListener("click", closeDrawer);
+$("#newclass").addEventListener("submit", closeDrawer);
+
+let installEvt = null;
+addEventListener("beforeinstallprompt", e => { e.preventDefault(); installEvt = e; $("#installBtn").hidden = false; });
+$("#installBtn").onclick = async () => {
+  if (!installEvt) return;
+  installEvt.prompt(); await installEvt.userChoice; installEvt = null; $("#installBtn").hidden = true;
+};
+addEventListener("appinstalled", () => { $("#installBtn").hidden = true; toast("App installiert 🎉"); });
+if ("serviceWorker" in navigator) addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => {}));
 // Easter Egg: Logo in der Seitenleiste anklicken
 $("#sideLogo").onclick = () => {
   const l = $("#sideLogo"); l.classList.remove("whirl"); void l.offsetWidth; l.classList.add("whirl");

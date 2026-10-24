@@ -192,4 +192,34 @@ input[type=checkbox]{width:18px;height:18px;accent-color:var(--accent)}
 .toast.show{opacity:1;transform:translateX(-50%)}
 
 @media (max-width:1000px){.wheelwrap{grid-template-columns:1fr}}
-@media (max-width:780px){.app{grid-template-columns:1fr;padding:12px}aside{position:static}.seg{margin-left:0}}
+button,.chip,.hub,a{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+.mobilebar,.scrim{display:none}
+@media (max-width:780px){
+  .app{grid-template-columns:1fr;gap:12px;padding:calc(10px + env(safe-area-inset-top)) calc(10px + env(safe-area-inset-right)) calc(16px + env(safe-area-inset-bottom)) calc(10px + env(safe-area-inset-left))}
+  .mobilebar{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:16px;position:sticky;top:calc(6px + env(safe-area-inset-top));z-index:30}
+  .mobilebar .mlogo{width:28px;height:28px;object-fit:contain}
+  .mobilebar b{font-size:17px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  aside{position:fixed;top:0;bottom:0;left:0;height:100vh;height:100dvh;align-self:auto;width:min(310px,86vw);z-index:50;border-radius:0 22px 22px 0;overflow-y:auto;
+    transform:translateX(-105%);transition:transform .28s cubic-bezier(.2,.8,.3,1);padding-top:calc(20px + env(safe-area-inset-top));
+    background:color-mix(in srgb,var(--bg2) 94%,transparent)}
+  body.drawer aside{transform:none}
+  .scrim{display:block;position:fixed;inset:0;z-index:45;background:rgba(0,0,0,.45);opacity:0;pointer-events:none;transition:opacity .25s}
+  body.drawer .scrim{opacity:1;pointer-events:auto}
+  .topbar{padding:12px}
+  .topbar h2{font-size:21px}
+  .seg{margin-left:0;width:100%}
+  .seg button{flex:1;padding:9px 6px}
+  .wheelcard{padding:14px 10px;gap:14px;border-radius:18px}
+  .wheel{width:100%}
+  .pointer{width:44px;height:58px;margin-left:-22px;top:-10px}
+  #spin{padding:14px 34px;font-size:18px}
+  .controls .btn{padding:10px 14px}
+  .side{gap:12px}
+  .card{padding:16px}
+  dialog{padding:22px 18px;width:min(480px,96vw)}
+  .quick .btn{padding:8px 13px;font-size:15px}
+  .scorebig{font-size:48px}
+  .pool .btn{height:32px;padding:0 12px}
+  table{font-size:14px} td,th{padding:8px 6px}
+  .kbd,.hint span:last-child{display:none}
+}

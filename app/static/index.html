@@ -2,7 +2,13 @@
 <html lang="de" data-theme="dark">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0a0d18">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Glücksrad">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <title>Glücksrad – Klassen</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -27,7 +33,12 @@
   </form>
 </div>
 <div class="app" id="appRoot" hidden>
-  <aside class="glass">
+  <header class="mobilebar glass">
+    <button class="btn ghost icon" id="menuBtn" aria-label="Menü">☰</button>
+    <img src="logo.png" alt="" class="mlogo"><b id="mTitle">Glücksrad</b>
+  </header>
+  <div class="scrim" id="scrim"></div>
+  <aside class="glass" id="drawer">
     <div class="brand"><img class="logo" id="sideLogo" src="logo.png" alt="" title="Nicht so fest drücken!">Glücksrad</div>
     <div class="label">Klassen</div>
     <ul class="classlist" id="classlist"></ul>
@@ -45,6 +56,7 @@
         <button class="btn ghost icon" id="pwBtn" title="Passwort ändern">🔑</button>
         <button class="btn ghost icon" id="logoutBtn" title="Abmelden">⏻</button>
       </div>
+      <button class="btn" id="installBtn" hidden>📲 Als App installieren</button>
     </div>
   </aside>
   <main id="main"><div class="glass empty muted">Lege links eine Klasse an oder wähle eine aus.</div></main>

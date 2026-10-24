@@ -755,6 +755,7 @@ def route(con, method, parts, body, user):
 
 # ----------------------------------------------------------------- Server ---
 MIME = {".html": "text/html; charset=utf-8", ".js": "application/javascript; charset=utf-8",
+        ".webmanifest": "application/manifest+json", ".ico": "image/x-icon",
         ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml", ".png": "image/png"}
 
 
@@ -772,7 +773,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("X-Frame-Options", "DENY")
         if cookie is not None:
             age = SESSION_DAYS * 86400 if cookie else 0
-            secure = "; Secure" if os.environ.get("COOKIE_SECURE") == "1" else ""
+            https = os.environ.get("COOKIE_SECURE") == "1" or self.headers.get("X-Forwarded-Proto", "").lower() == "https"
+            secure = "; Secure" if https else ""
             self.send_header("Set-Cookie", f"gr_session={cookie}; Path=/; HttpOnly; SameSite=Strict; Max-Age={age}{secure}")
         self.send_header("Content-Length", str(len(data)))
         self.send_header("Cache-Control", "no-store")

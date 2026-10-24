@@ -31,6 +31,8 @@ Alt (lokal gebaut):
 Update: `podman build --format docker -t gluecksrad .` und `systemctl --user restart gluecksrad`.
 
 ## Funktionen
+- **Als App installierbar (PWA)**: unter HTTPS in Chrome/Android „App installieren“ (oder Button 📲 im Menü),
+  iPhone: Teilen → „Zum Home-Bildschirm“. Eigenes Icon, Vollbild, Handy-Layout mit Menü ☰.
 - **Benutzerverwaltung**: Anmeldung mit Passwort (PBKDF2-Hash, HttpOnly-Session-Cookie, Sperre nach 5 Fehlversuchen für 1 Minute).
   Rollen *Administrator/in* (verwaltet Benutzer) und *Lehrkraft*. Jede/r sieht nur die eigenen Klassen. Passwort selbst ändern über 🔑.
 - **Teamteaching**: Klassen über „👥 Team“ mit anderen Lehrkräften teilen – alle im Team bearbeiten dieselbe Klasse
