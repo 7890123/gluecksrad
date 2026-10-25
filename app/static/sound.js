@@ -20,7 +20,21 @@ const Sound = (() => {
       for (const k of ["tick", "win"]) if (customRaw[k]) decode(k);
     }
     if (ctx.state === "suspended") ctx.resume();
+    keepAlive(4);
     return ctx;
+  }
+
+  // Ein laufender AudioContext hält den Audio-Thread dauerhaft aktiv (kostet CPU/Akku, auch wenn es still ist).
+  // Daher nach ein paar Sekunden Stille pausieren; beim nächsten Ton wird er automatisch fortgesetzt.
+  let idleTimer = null, aliveUntil = 0;
+  function keepAlive(sec) {
+    aliveUntil = Math.max(aliveUntil, performance.now() + sec * 1000);
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(function check() {
+      if (!ctx || ctx.state !== "running") return;
+      if (roll || spinLoop || performance.now() < aliveUntil) { idleTimer = setTimeout(check, 1000); return; }
+      ctx.suspend().catch(() => {});
+    }, Math.max(0, aliveUntil - performance.now()) + 50);
   }
 
   async function decode(kind) {
@@ -58,6 +72,7 @@ const Sound = (() => {
     const s = ctx.createBufferSource(), g = ctx.createGain();
     s.buffer = buf; s.playbackRate.value = rate; g.gain.value = vol;
     s.connect(g); g.connect(master); s.start(when ?? ctx.currentTime);
+    keepAlive(buf.duration / Math.max(0.1, rate) + 1);
     return { s, g };
   }
 

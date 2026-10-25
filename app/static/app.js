@@ -261,7 +261,8 @@ function drawWheel() {
   const segs = poolSegments(), n = segs.length, now = performance.now();
   ctx.clearRect(0, 0, W, W);
 
-  const pattern = state.spinning ? "p2_" + (state.lights % 2) : state.winnerPos !== null ? "p3_" + (Math.floor(now / 160) % 3) : "all";
+  const pattern = state.spinning ? "p2_" + (state.lights % 2)
+    : state.winnerPos !== null && !state.winnerSettled ? "p3_" + (Math.floor(now / 160) % 3) : "all";
   ctx.drawImage(rimLayer(W, pattern), 0, 0);
 
   if (!n) {
@@ -283,7 +284,7 @@ function drawWheel() {
       ctx.fillStyle = "rgba(8,8,25,.55)"; ctx.fill();
       ctx.save(); ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, R, st, st + a); ctx.closePath();
       ctx.shadowColor = "rgba(255,220,120,.9)"; ctx.shadowBlur = 30;
-      ctx.lineWidth = 8; ctx.strokeStyle = `rgba(255,230,150,${0.7 + 0.3 * Math.sin(now / 150)})`; ctx.stroke(); ctx.restore();
+      ctx.lineWidth = 8; ctx.strokeStyle = `rgba(255,230,150,${state.winnerSettled ? 1 : 0.7 + 0.3 * Math.sin(now / 150)})`; ctx.stroke(); ctx.restore();
     }
   }
   // Glanz + Kante (statisch, nicht mitgedreht)
@@ -407,8 +408,15 @@ function hubWobble() {
   hub.classList.remove("wobble"); void hub.offsetWidth; hub.classList.add("wobble");
   setTimeout(() => { hub.classList.remove("wobble"); setHub(hubAngle); }, 1150);
 }
+// Gewinner-Feld kurz pulsieren lassen, dann statisch – keine Dauer-Animation im Leerlauf
+// (sonst müssten Canvas und die Unschärfe hinter dem Bewertungsdialog ständig neu berechnet werden).
 function animateWinner() {
-  const loop = () => { if (state.winnerPos === null || state.spinning) return; drawWheel(); requestAnimationFrame(loop); };
+  const until = performance.now() + 1600;
+  const loop = () => {
+    if (state.winnerPos === null || state.spinning) return;
+    if (performance.now() < until) { drawWheel(); requestAnimationFrame(loop); }
+    else { state.winnerSettled = true; drawWheel(); state.winnerSettled = false; }
+  };
   requestAnimationFrame(loop);
 }
 
@@ -479,7 +487,7 @@ document.addEventListener("keydown", e => {
 });
 
 /* ---------------- Konfetti ---------------- */
-const cf = $("#confetti"), cfx = cf.getContext("2d"); let parts = [], cfRunning = false;
+const cf = $("#confetti"), cfx = cf.getContext("2d"); let parts = [], cfRunning = false, cfUntil = 0;
 function confetti(count = 120, origin) {
   cf.width = innerWidth * devicePixelRatio; cf.height = innerHeight * devicePixelRatio;
   const cols = ["#0062ab", "#98c10f", "#eb6420", "#2b8ad8", "#c3e05a", "#ffffff"];
@@ -489,6 +497,7 @@ function confetti(count = 120, origin) {
     parts.push({ x: o.x, y: o.y, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp - (origin ? 4 : 0), r: rand(0, TAU), vr: rand(-.3, .3),
       w: rand(6, 12), h: rand(8, 16), c: cols[i % cols.length], life: rand(90, 160) });
   }
+  cfUntil = performance.now() + 3200;               // Konfetti läuft höchstens ~3 s
   if (!cfRunning) { cfRunning = true; requestAnimationFrame(cfLoop); }
 }
 function cfLoop() {
@@ -499,7 +508,8 @@ function cfLoop() {
     cfx.save(); cfx.translate(p.x, p.y); cfx.rotate(p.r); cfx.globalAlpha = Math.min(1, p.life / 40);
     cfx.fillStyle = p.c; cfx.fillRect(-p.w / 2, -p.h / 2 * Math.abs(Math.cos(p.r * 2)), p.w, p.h * Math.abs(Math.cos(p.r * 2)) + 1); cfx.restore();
   }
-  if (parts.length) requestAnimationFrame(cfLoop); else { cfRunning = false; cfx.clearRect(0, 0, innerWidth, innerHeight); }
+  if (parts.length && performance.now() < cfUntil) requestAnimationFrame(cfLoop);
+  else { parts = []; cfRunning = false; cfx.clearRect(0, 0, innerWidth, innerHeight); }
 }
 
 /* ---------------- Schülerliste ---------------- */
