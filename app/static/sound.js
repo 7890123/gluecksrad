@@ -5,6 +5,7 @@ const Sound = (() => {
   try { muted = localStorage.getItem("muted") === "1"; } catch (e) {}
 
   const cfg = { tick: "ratchet", win: "fanfare", roll: true, volume: 0.6 };
+  let season = "none";
   const custom = { tick: null, win: null };       // AudioBuffer
   const customRaw = { tick: null, win: null };    // ArrayBuffer (vor dem Dekodieren)
 
@@ -106,6 +107,70 @@ const Sound = (() => {
     },
   };
 
+  /* ---------- Halloween ---------- */
+  function vibrato(o, t, rate, depth, dur) {
+    const l = ctx.createOscillator(), g = ctx.createGain();
+    l.frequency.value = rate; g.gain.value = depth; l.connect(g); g.connect(o.frequency); l.start(t); l.stop(t + dur + .1);
+  }
+  function voice(freq, t, dur, { type = "sine", vol = .2, to = null, vib = 0, rate = 6, filter = null } = {}) {
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = type; o.frequency.setValueAtTime(freq, t); if (to) o.frequency.exponentialRampToValueAtTime(to, t + dur);
+    if (vib) vibrato(o, t, rate, vib, dur);
+    g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + Math.min(.25, dur / 3)); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+    let n = o; if (filter) { const f = ctx.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = filter; o.connect(f); n = f; }
+    n.connect(g); g.connect(master); o.start(t); o.stop(t + dur + .05);
+  }
+  const SPOOKY = {
+    // Gruselorgel in d-Moll + Donnergrollen + Theremin
+    win(t) {
+      noise(t, 2.2, { vol: .35, type: "lowpass", freq: 180, q: .7, attack: .3 });
+      [146.83, 174.61, 220, 293.66].forEach(f => voice(f, t + .05, 1.9, { type: "sawtooth", vol: .07, vib: 2, rate: 5, filter: 1400 }));
+      [[440, 415.3], [415.3, 392], [392, 369.99]].forEach(([a, b], i) => voice(a, t + .1 + i * .18, .2, { type: "square", vol: .05, to: b, filter: 1800 }));
+      voice(880, t + .7, 1.4, { vol: .08, to: 520, vib: 18, rate: 7 });
+    },
+    removed(t) {   // Geist entwischt: Fauchen nach oben + Glitzern
+      noise(t, .6, { vol: .25, freq: 600, freqTo: 6000, q: 3 });
+      [659.25, 830.61, 987.77, 1318.5].forEach((f, i) => tone(f, t + .25 + i * .08, .5, { type: "sine", vol: .16 }));
+    },
+    kept(t) {      // zwei Turmglocken
+      [0, .55].forEach(d => { tone(146.83, t + d, 1.4, { type: "sine", vol: .3 }); tone(146.83 * 2.4, t + d, .9, { type: "sine", vol: .08 }); });
+    },
+    added(t) {     // Gespenst: „Buuuuh“
+      voice(330, t, 1.5, { vol: .22, to: 196, vib: 14, rate: 5.5, filter: 1200 });
+      voice(165, t + .05, 1.5, { type: "triangle", vol: .1, to: 98, vib: 7, rate: 5.5 });
+      noise(t, 1.4, { vol: .06, type: "bandpass", freq: 700, q: 1.5, attack: .4 });
+    },
+  };
+
+  /* ---------- Weihnachten ---------- */
+  function sleighBells(t, dur, vol = .12) {
+    for (let x = 0; x < dur; x += .11) {
+      noise(t + x, .07, { vol: vol * (0.6 + Math.random() * .4), type: "highpass", freq: 6500, q: .8, attack: .002 });
+      tone(2600 + Math.random() * 900, t + x, .06, { type: "sine", vol: vol * .4, attack: .002 });
+    }
+  }
+  function bell(f, t, d = 1.2, v = .2) {
+    tone(f, t, d, { type: "sine", vol: v, attack: .003 }); tone(f * 2.76, t, d * .5, { type: "sine", vol: v * .25, attack: .003 });
+    tone(f * 5.4, t, d * .25, { type: "sine", vol: v * .1, attack: .003 });
+  }
+  const XMAS = {
+    // Schellen + „Jingle Bells“ (E E E – E E E – E G C D E)
+    win(t) {
+      sleighBells(t, 2.2);
+      const E = 659.25, G = 783.99, C = 523.25, D = 587.33, q = .17;
+      [[E, 0], [E, 1], [E, 2], [E, 4], [E, 5], [E, 6], [E, 8], [G, 9], [C, 10], [D, 11], [E, 12]]
+        .forEach(([f, k]) => bell(f, t + .1 + k * q, k === 12 ? 1.4 : .45, .18));
+    },
+    removed(t) { [1046.5, 1318.5, 1568, 2093].forEach((f, i) => bell(f, t + i * .09, .9, .14)); sleighBells(t, .7, .08); },
+    kept(t) { bell(523.25, t, 1.3, .2); bell(392, t + .35, 1.5, .2); },
+    added(t) {   // „Ho ho ho“
+      [0, .32, .64].forEach(d => {
+        tone(110, t + d, .26, { type: "sawtooth", vol: .16, filter: 600, glideTo: 92 });
+        noise(t + d, .2, { vol: .07, type: "bandpass", freq: 500, q: 2 });
+      });
+    },
+  };
+
   /* ---------- Gewinn-Varianten ---------- */
   const WINS = {
     fanfare(t) {
@@ -134,6 +199,7 @@ const Sound = (() => {
     get config() { return { ...cfg }; },
     hasCustom(kind) { return !!customRaw[kind]; },
     customInfo(kind) { return custom[kind] ? custom[kind].duration : null; },
+    setSeason(s) { season = s; },
     configure(c) {
       Object.assign(cfg, c || {});
       if (master) master.gain.value = cfg.volume;
@@ -204,12 +270,16 @@ const Sound = (() => {
       const kind = preset || cfg.win;
       play(t => {
         if (kind === "custom") { if (custom.win) playBuffer(custom.win); else WINS.fanfare(t); }
+        else if (season === "halloween" && kind !== "none" && !preset) SPOOKY.win(t);
+        else if (season === "christmas" && kind !== "none" && !preset) XMAS.win(t);
         else (WINS[kind] || WINS.fanfare)(t);
       });
     },
-    removed() { play(t => [783.99, 1046.5, 1318.5, 1568, 2093].forEach((f, i) => tone(f, t + i * 0.07, 0.45, { type: "sine", vol: 0.2 }))); },
-    kept() { play(t => { tone(659.25, t, 0.22, { type: "triangle", vol: 0.2 }); tone(659.25, t + 0.18, 0.3, { type: "triangle", vol: 0.2 }); }); },
+    removed() { if (season === "halloween") return play(t => SPOOKY.removed(t)); if (season === "christmas") return play(t => XMAS.removed(t)); play(t => [783.99, 1046.5, 1318.5, 1568, 2093].forEach((f, i) => tone(f, t + i * 0.07, 0.45, { type: "sine", vol: 0.2 }))); },
+    kept() { if (season === "halloween") return play(t => SPOOKY.kept(t)); if (season === "christmas") return play(t => XMAS.kept(t)); play(t => { tone(659.25, t, 0.22, { type: "triangle", vol: 0.2 }); tone(659.25, t + 0.18, 0.3, { type: "triangle", vol: 0.2 }); }); },
     added() {
+      if (season === "halloween") return play(t => SPOOKY.added(t));
+      if (season === "christmas") return play(t => XMAS.added(t));
       play(t => [392, 370, 349.2, 329.6].forEach((f, i) =>
         tone(f, t + i * 0.28, i === 3 ? 0.9 : 0.3, { type: "sawtooth", vol: 0.12, filter: 900, glideTo: i === 3 ? 300 : null })));
     },

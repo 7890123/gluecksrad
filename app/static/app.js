@@ -11,15 +11,49 @@ const state = {
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const outcomeOf = s => s >= 70 ? "removed" : s >= 50 ? "kept" : "added";
-const OUT_TEXT = { removed: "fliegt aus dem Rad", kept: "bleibt im Rad", added: "kommt ein zusätzliches Mal ins Rad" };
-const OUT_SHORT = { removed: "raus", kept: "bleibt", added: "+1 im Rad" };
+const OUT_TEXT_STD = { removed: "fliegt aus dem Rad", kept: "bleibt im Rad", added: "kommt ein zusätzliches Mal ins Rad" };
+const OUT_SHORT_STD = { removed: "raus", kept: "bleibt", added: "+1 im Rad" };
+/* Saison-Themes: alles, was sich je Theme unterscheidet, an einer Stelle */
+const SEASONS = {
+  none: { icon: "✨", name: "Standard", hub: "logo.png", spin: "Drehen!", winLabel: "Gezogen wurde", tagline: "Wer ist dran?",
+    out: OUT_TEXT_STD, short: OUT_SHORT_STD, palette: null,
+    rim: ["#0a5ea8", "#06264a", "#0b4f8f"], bulbs: ["152,193,15", "235,100,32", "120,190,255"],
+    confetti: ["#0062ab", "#98c10f", "#eb6420", "#2b8ad8", "#c3e05a", "#ffffff"], emoji: null },
+  halloween: { icon: "🎃", name: "Halloween", hub: "halloween/pumpkin.svg", spin: "🎃 Verhexen!", winLabel: "Der Fluch trifft …", tagline: "Wer wird verhext?",
+    out: { removed: "entkommt dem Fluch 👻 (raus)", kept: "bleibt im Spukrad 🕸️", added: "wird doppelt verhext 🧙 (+1 im Rad)" },
+    short: { removed: "entkommen", kept: "bleibt", added: "verhext +1" },
+    // Kürbis, Hexenlila, Gift-Grün, Blutrot, Senf, Nachtviolett
+    palette: [[24, 100, 52], [268, 62, 48], [104, 62, 38], [356, 72, 44], [40, 88, 46], [282, 40, 30]],
+    rim: ["#2a1240", "#0d0614", "#3b1a52"], bulbs: ["255,140,26", "160,90,255", "124,255,79"],
+    confetti: ["#ff7a1a", "#8b5cf6", "#7cff4f", "#1a1024", "#ffd23f", "#f5f0ff"], emoji: ["🎃", "🦇", "👻", "🍬", "🕷️", "🍭"],
+    font: { family: "Creepster", url: "https://fonts.googleapis.com/css2?family=Creepster&display=swap" } },
+  christmas: { icon: "🎄", name: "Weihnachten", hub: "christmas/bauble.svg", spin: "🎁 Bescheren!", winLabel: "Das Christkind wählt …", tagline: "Wer kommt dran? Ho ho ho!",
+    out: { removed: "darf sich ans Kaminfeuer setzen ☕ (raus)", kept: "bleibt am Baum 🎄", added: "bekommt eine Extra-Kugel 🎁 (+1 im Rad)" },
+    short: { removed: "beschert", kept: "bleibt", added: "+1 Kugel" },
+    // Rot, Tannengrün, Gold, Weinrot, Eisblau, Dunkelgrün
+    palette: [[355, 78, 46], [140, 55, 32], [43, 90, 46], [345, 60, 32], [200, 60, 45], [155, 45, 24]],
+    rim: ["#7a0b16", "#2b0508", "#14532d"], bulbs: ["255,236,170", "255,80,80", "110,231,140"],
+    confetti: ["#e11d2e", "#16a34a", "#f5b800", "#ffffff", "#bfe3ff", "#7a0b16"], emoji: ["❄️", "🎁", "⭐", "🎄", "🔔", "🍪"],
+    font: { family: "Mountains of Christmas", url: "https://fonts.googleapis.com/css2?family=Mountains+of+Christmas:wght@700&display=swap" } },
+};
+const seasonKey = () => SEASONS[document.documentElement.dataset.season] ? document.documentElement.dataset.season : "none";
+const SEASON = () => SEASONS[seasonKey()];
+const isHW = () => seasonKey() === "halloween";
+const isXmas = () => seasonKey() === "christmas";
+const OUT_TEXT = new Proxy({}, { get: (_, k) => SEASON().out[k] });
+const OUT_SHORT = new Proxy({}, { get: (_, k) => SEASON().short[k] });
 const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
 const rand = (a, b) => a + Math.random() * (b - a);
 const initials = n => n.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join("");
 
 function studentIndex(id) { return state.current ? state.current.students.findIndex(s => s.id === id) : 0; }
 function hueFor(id) { return (Math.max(0, studentIndex(id)) * 137.508 + 265) % 360; }
-function colorFor(id, l = 58) { return `hsl(${hueFor(id)} 78% ${l}%)`; }
+function segHSL(id) {
+  const pal = SEASON().palette;
+  if (pal) { const i = Math.max(0, studentIndex(id)); return pal[i % pal.length]; }
+  return [hueFor(id), 78, 56];
+}
+function colorFor(id, l = 58) { const [h, s, b] = segHSL(id); return `hsl(${h} ${s}% ${b + (l - 58)}%)`; }
 
 async function api(method, url, body) {
   const r = await fetch("/api" + url, { method, credentials: "same-origin",
@@ -119,7 +153,7 @@ function poolSegments() {
 }
 
 const POINTER_SVG = `<svg class="pointer" id="pointer" viewBox="0 0 54 70">
-  <defs><linearGradient id="pg" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="#fff6c8"/><stop offset=".45" stop-color="#ffcc33"/><stop offset="1" stop-color="#e08a00"/></linearGradient></defs>
+  <defs><linearGradient id="pg" x1="0" x2="1" y1="0" y2="1"><stop class="s1" offset="0" stop-color="#fff6c8"/><stop class="s2" offset=".45" stop-color="#ffcc33"/><stop class="s3" offset="1" stop-color="#e08a00"/></linearGradient></defs>
   <path d="M27 68 L6 22 A21 21 0 1 1 48 22 Z" fill="url(#pg)" stroke="rgba(0,0,0,.25)" stroke-width="1.5"/>
   <circle cx="27" cy="16" r="7" fill="#fff" opacity=".85"/></svg>`;
 
@@ -132,11 +166,11 @@ function renderWheelTab() {
       <div class="glass wheelcard">
         <div class="wheel" id="wheelBox"><div class="glow"></div>
           <canvas id="wheel" width="1100" height="1100"></canvas>${POINTER_SVG}
-          <button class="hub" id="hub" title="Drehen (Leertaste)"><img src="logo.png" alt="Drehen"></button>
+          <button class="hub" id="hub" title="Drehen (Leertaste)"><img src="${SEASON().hub}" alt="Drehen"></button>
         </div>
         <div class="controls">
           <button class="btn" id="shuffleBtn" title="Reihenfolge im Rad zufällig mischen">🎲 Mischen</button>
-          <button class="btn primary" id="spin">Drehen!</button>
+          <button class="btn primary" id="spin">${SEASON().spin}</button>
           <button class="btn" id="resetBtn" title="Jede/n genau einmal ins Rad">↺ Zurücksetzen</button>
         </div>
         <div class="hint"><span><b class="g">≥ 70 %</b> raus</span><span><b class="m">50–69 %</b> bleibt</span><span><b class="r">&lt; 50 %</b> +1 im Rad</span><span>Leertaste = drehen</span></div>
@@ -206,11 +240,11 @@ function mkCanvas(W) { const c = document.createElement("canvas"); c.width = c.h
 const GEOM = W => { const Rrim = W / 2 - 12; return { cx: W / 2, cy: W / 2, Rrim, R: Rrim - 46 }; };
 
 function rimLayer(W, pattern) {
-  const key = W + ":" + pattern;
+  const S = SEASON(), key = W + ":" + pattern + ":" + seasonKey();
   if (rimCache[key]) return rimCache[key];
   const cv = mkCanvas(W), ctx = cv.getContext("2d"), { cx, cy, Rrim } = GEOM(W);
   const rim = ctx.createLinearGradient(0, 0, W, W);
-  rim.addColorStop(0, "#0a5ea8"); rim.addColorStop(.5, "#06264a"); rim.addColorStop(1, "#0b4f8f");
+  rim.addColorStop(0, S.rim[0]); rim.addColorStop(.5, S.rim[1]); rim.addColorStop(1, S.rim[2]);
   ctx.beginPath(); ctx.arc(cx, cy, Rrim, 0, TAU); ctx.fillStyle = rim; ctx.fill();
   ctx.lineWidth = 3; ctx.strokeStyle = "rgba(255,255,255,.25)"; ctx.stroke();
   const bulbs = 28;
@@ -218,7 +252,7 @@ function rimLayer(W, pattern) {
     const on = pattern === "all" ? true : pattern.startsWith("p2") ? (i + +pattern[3]) % 2 === 0 : (i + +pattern[3]) % 3 === 0;
     const ang = i / bulbs * TAU, x = cx + Math.cos(ang) * (Rrim - 23), y = cy + Math.sin(ang) * (Rrim - 23);
     const g = ctx.createRadialGradient(x, y, 0, x, y, 16);
-    const bc = ["152,193,15", "235,100,32", "120,190,255"][i % 3];       // Logo-Farben als Lämpchen
+    const bc = S.bulbs[i % 3];    // Lämpchen in den Theme-Farben
     g.addColorStop(0, on ? "rgba(255,255,240,1)" : "rgba(255,255,255,.25)");
     g.addColorStop(.45, on ? `rgba(${bc},.95)` : "rgba(255,255,255,.08)");
     g.addColorStop(1, `rgba(${bc},0)`);
@@ -228,13 +262,13 @@ function rimLayer(W, pattern) {
 }
 
 function wheelLayer(W, segs) {
-  const key = W + "|" + segs.map(s => s.id + ":" + s.name + ":" + studentIndex(s.id)).join(",");
+  const key = W + "|" + seasonKey() + "|" + segs.map(s => s.id + ":" + s.name + ":" + studentIndex(s.id)).join(",");
   if (layerCache.key === key) return layerCache.canvas;
   const cv = mkCanvas(W), ctx = cv.getContext("2d"), { cx, cy, R } = GEOM(W), n = segs.length, a = TAU / n;
   segs.forEach((s, k) => {
-    const st = k * a, h = hueFor(s.id);
+    const st = k * a, [h, sa, li] = segHSL(s.id);
     const g = ctx.createRadialGradient(cx, cy, R * 0.15, cx, cy, R);
-    g.addColorStop(0, `hsl(${h} 85% 70%)`); g.addColorStop(.7, `hsl(${h} 78% 56%)`); g.addColorStop(1, `hsl(${h} 70% 42%)`);
+    g.addColorStop(0, `hsl(${h} ${Math.min(100, sa + 7)}% ${li + 14}%)`); g.addColorStop(.7, `hsl(${h} ${sa}% ${li}%)`); g.addColorStop(1, `hsl(${h} ${sa - 8}% ${li - 14}%)`);
     ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, R, st, st + a); ctx.closePath();
     ctx.fillStyle = g; ctx.fill();
     ctx.strokeStyle = "rgba(255,255,255,.35)"; ctx.lineWidth = n > 40 ? 1 : 2.5; ctx.stroke();
@@ -362,6 +396,7 @@ function spin() {
   const mo = buildMotion(state.rotation % TAU, k, n);
   state.rotation = mo.start; state.spinning = true; state.winnerPos = null; state.drawn = null;
   setControls();
+  if (isXmas()) snow(mo.total * 1000 - 1500, 110);
   const box = $("#wheelBox"); if (box) box.classList.add("spinning");
   let lastIdx = pointerIndex(state.rotation, n), lastAng = state.rotation, rolling = false, lastLight = 0;
   const t0 = performance.now();
@@ -374,6 +409,8 @@ function spin() {
     const pos = pointerIndex(state.rotation, n);
     state.winnerPos = pos; state.pendingRating = true;
     safe(() => Sound.win()); safe(() => confetti(70, { x: innerWidth / 2, y: innerHeight * 0.35 }));
+    if (isHW()) bats(4);
+    if (isXmas()) snow(5000, 90);
     animateWinner(); setControls();
     setTimeout(() => { state.pendingRating = false; openRating(segs[pos], pos); }, 650);
   };
@@ -458,6 +495,7 @@ range.oninput = () => setScore(range.value);
 function openRating(s, pos) {
   state.drawn = s; state.drawnPos = pos;
   $("#winnerName").textContent = s.name;
+  $("#winLabel").textContent = SEASON().winLabel;
   const av = $("#winAvatar"); av.textContent = initials(s.name); av.style.background = `linear-gradient(135deg, ${colorFor(s.id, 62)}, ${colorFor(s.id, 42)})`;
   setScore(60); if (!dlg.open) dlg.showModal(); $("#saveBtn").focus();
 }
@@ -490,22 +528,39 @@ document.addEventListener("keydown", e => {
 const cf = $("#confetti"), cfx = cf.getContext("2d"); let parts = [], cfRunning = false, cfUntil = 0;
 function confetti(count = 120, origin) {
   cf.width = innerWidth * devicePixelRatio; cf.height = innerHeight * devicePixelRatio;
-  const cols = ["#0062ab", "#98c10f", "#eb6420", "#2b8ad8", "#c3e05a", "#ffffff"];
+  const cols = SEASON().confetti, emo = SEASON().emoji;
   for (let i = 0; i < count; i++) {
     const o = origin || { x: rand(0, innerWidth), y: -20 };
     const ang = origin ? rand(0, TAU) : rand(Math.PI * .35, Math.PI * .65), sp = origin ? rand(4, 13) : rand(2, 6);
     parts.push({ x: o.x, y: o.y, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp - (origin ? 4 : 0), r: rand(0, TAU), vr: rand(-.3, .3),
-      w: rand(6, 12), h: rand(8, 16), c: cols[i % cols.length], life: rand(90, 160) });
+      w: rand(6, 12), h: rand(8, 16), c: cols[i % cols.length], life: rand(90, 160),
+      e: emo && i % 3 === 0 ? emo[i % emo.length] : null, fs: rand(18, 30) });
   }
   cfUntil = performance.now() + 3200;               // Konfetti läuft höchstens ~3 s
   if (!cfRunning) { cfRunning = true; requestAnimationFrame(cfLoop); }
 }
+// Schneefall: zeitlich begrenzt (z. B. während der Drehung), keine Dauerlast im Leerlauf
+function snow(ms = 4000, count = 70) {
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  cf.width = innerWidth * devicePixelRatio; cf.height = innerHeight * devicePixelRatio;
+  const until = performance.now() + ms;
+  for (let i = 0; i < count; i++)
+    parts.push({ flake: true, x: rand(0, innerWidth), y: rand(-innerHeight * .6, -10), vx: rand(-.3, .3), vy: rand(.8, 2.2),
+      r: rand(1.5, 4), ph: rand(0, 300), until: until + rand(0, 1500) });
+  cfUntil = Math.max(cfUntil, until + 4000);
+  if (!cfRunning) { cfRunning = true; requestAnimationFrame(cfLoop); }
+}
 function cfLoop() {
   cfx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0); cfx.clearRect(0, 0, innerWidth, innerHeight);
-  parts = parts.filter(p => p.life-- > 0 && p.y < innerHeight + 40);
+  parts = parts.filter(p => (p.flake || p.life-- > 0) && p.y < innerHeight + 40 && !(p.flake && performance.now() > p.until));
   for (const p of parts) {
+    if (p.flake) {   // Schneeflocke: langsam, leicht schaukelnd
+      p.x += p.vx + Math.sin((p.y + p.ph) / 40) * .6; p.y += p.vy;
+      cfx.globalAlpha = .9; cfx.fillStyle = "#fff"; cfx.beginPath(); cfx.arc(p.x, p.y, p.r, 0, TAU); cfx.fill(); continue;
+    }
     p.vy += .18; p.vx *= .99; p.x += p.vx; p.y += p.vy; p.r += p.vr;
     cfx.save(); cfx.translate(p.x, p.y); cfx.rotate(p.r); cfx.globalAlpha = Math.min(1, p.life / 40);
+    if (p.e) { cfx.font = `${p.fs}px serif`; cfx.textAlign = "center"; cfx.textBaseline = "middle"; cfx.fillText(p.e, 0, 0); cfx.restore(); continue; }
     cfx.fillStyle = p.c; cfx.fillRect(-p.w / 2, -p.h / 2 * Math.abs(Math.cos(p.r * 2)), p.w, p.h * Math.abs(Math.cos(p.r * 2)) + 1); cfx.restore();
   }
   if (parts.length && performance.now() < cfUntil) requestAnimationFrame(cfLoop);
@@ -577,6 +632,53 @@ function renderHistoryTab() {
 /* ---------------- Start ---------------- */
 function applyTheme(t) { document.documentElement.dataset.theme = t; $("#themeBtn").textContent = t === "dark" ? "🌙" : "☀️"; store.set("theme", t); }
 applyTheme(store.get("theme") || "dark");
+/* ---------------- Halloween-Theme (optional, pro Benutzer gespeichert) ---------------- */
+let batTimer = null;
+function applySeason(s, save = false) {
+  if (!SEASONS[s]) s = "none";
+  document.documentElement.dataset.season = s;
+  const S = SEASONS[s];
+  store.set("season", s);
+  safe(() => Sound.setSeason(s));
+  const next = SEASONS[{ none: "halloween", halloween: "christmas", christmas: "none" }[s]];
+  $("#seasonBtn").textContent = S.icon;
+  $("#seasonBtn").classList.toggle("on", s !== "none");
+  $("#seasonBtn").title = `Theme: ${S.name} – klicken für ${next.name}`;
+  if (S.font && !document.getElementById("font-" + s)) {
+    const l = document.createElement("link"); l.id = "font-" + s; l.rel = "stylesheet"; l.href = S.font.url; document.head.appendChild(l);
+  }
+  $(".tagline").textContent = S.tagline;
+  layerCache.key = ""; for (const k in rimCache) delete rimCache[k];
+  if (!state.spinning && !state.pendingRating) renderMain(); else drawWheel();
+  clearTimeout(batTimer);
+  if (s === "halloween") ambientBats();
+  if (save && state.user) api("PUT", "/me/settings", { season: s }).catch(() => {});
+}
+// Ab und zu flattert eine Fledermaus vorbei – kurze Einzel-Animation, keine Dauerlast im Leerlauf
+function ambientBats() {
+  batTimer = setTimeout(() => { if (isHW() && !document.hidden) bats(1); ambientBats(); }, 25000 + Math.random() * 25000);
+}
+function bats(n) {
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  for (let i = 0; i < n; i++) {
+    const b = document.createElement("img");
+    b.src = "halloween/bat.svg"; b.className = "bat"; b.alt = "";
+    const fromLeft = Math.random() < .5, y = rand(5, 55);
+    b.style.cssText = `top:${y}vh;--dx:${fromLeft ? 1 : -1};--dy:${rand(-25, 15)}vh;--s:${rand(.6, 1.2)};animation-delay:${i * .25}s;${fromLeft ? "left:-80px" : "right:-80px"}`;
+    b.addEventListener("animationend", () => b.remove());
+    document.body.appendChild(b);
+  }
+}
+$("#seasonBtn").onclick = () => {
+  const next = { none: "halloween", halloween: "christmas", christmas: "none" }[seasonKey()];
+  applySeason(next, true);
+  safe(() => Sound.unlock());
+  if (next === "halloween") { bats(3); safe(() => Sound.added()); toast("🎃 Halloween-Modus an – Muahaha!"); }
+  else if (next === "christmas") { snow(5000, 120); safe(() => Sound.win()); toast("🎄 Weihnachts-Modus an – Ho ho ho!"); }
+  else toast("Standard-Theme");
+};
+applySeason(store.get("season") || "none");
+
 $("#themeBtn").onclick = () => applyTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
 $("#soundBtn").textContent = Sound.muted ? "🔇" : "🔊";
 $("#soundBtn").onclick = () => { $("#soundBtn").textContent = Sound.toggle() ? "🔇" : "🔊"; Sound.click(); };
@@ -590,6 +692,7 @@ async function loadSoundSettings() {
   try {
     const r = await api("GET", "/me/settings");
     soundState = r; Sound.configure(r.settings);
+    if (r.settings.season && r.settings.season !== (document.documentElement.dataset.season || "none")) applySeason(r.settings.season);
     for (const k of ["tick", "win"]) {
       if (r.sounds[k]) {
         const res = await fetch(`/api/me/sounds/${k}`, { credentials: "same-origin" });

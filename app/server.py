@@ -417,14 +417,16 @@ def auth_route(con, method, parts, body, ctx):
                 kinds = {r[0] for r in con.execute("SELECT kind FROM user_sounds WHERE user_id=?", (user["id"],))}
                 return {"settings": st, "sounds": {k: k in kinds for k in SOUND_KINDS}}
             if method == "PUT":
-                st = {}
+                st = json.loads(user["settings"] or "{}")       # nur übergebene Felder ändern
                 if body.get("tick") in TICK_PRESETS: st["tick"] = body["tick"]
                 if body.get("win") in WIN_PRESETS: st["win"] = body["win"]
-                st["roll"] = bool(body.get("roll", True))
-                try:
-                    st["volume"] = max(0.0, min(1.0, float(body.get("volume", 0.6))))
-                except (TypeError, ValueError):
-                    st["volume"] = 0.6
+                if "roll" in body: st["roll"] = bool(body["roll"])
+                if "volume" in body:
+                    try:
+                        st["volume"] = max(0.0, min(1.0, float(body["volume"])))
+                    except (TypeError, ValueError):
+                        pass
+                if body.get("season") in ("none", "halloween", "christmas"): st["season"] = body["season"]
                 con.execute("UPDATE users SET settings=? WHERE id=?", (json.dumps(st), user["id"]))
                 return {"settings": st}
         if len(parts) == 3 and parts[1] == "sounds" and parts[2] in SOUND_KINDS:

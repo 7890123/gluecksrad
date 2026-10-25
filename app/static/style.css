@@ -229,3 +229,113 @@ button,.chip,.hub,a{touch-action:manipulation;-webkit-tap-highlight-color:transp
   .authlogo img,.hub img,.brand .logo{animation:none!important}
   dialog[open]{animation:none}
 }
+
+/* =================== Halloween-Theme =================== */
+:root[data-season="halloween"]{
+  --accent:#ff7a1a; --accent-2:#a78bfa; --accent-3:#7cff4f;
+  --blob1:rgba(255,122,26,.30); --blob2:rgba(139,92,246,.30); --blob3:rgba(124,255,79,.14);
+}
+:root[data-season="halloween"][data-theme="dark"]{ --bg:#0b0710; --bg2:#160d22; }
+:root[data-season="halloween"] body{
+  background-image:
+    radial-gradient(circle at 88% 9%, #fff7d6 0 34px, rgba(255,240,190,.35) 36px, transparent 90px),
+    radial-gradient(900px 600px at 10% -10%, var(--blob1), transparent 60%),
+    radial-gradient(700px 500px at 100% 10%, var(--blob2), transparent 60%),
+    radial-gradient(800px 600px at 60% 120%, var(--blob3), transparent 60%);
+}
+:root[data-season="halloween"] .btn.primary,
+:root[data-season="halloween"] .chip.on,
+:root[data-season="halloween"] .avatar.sm{background:linear-gradient(135deg,#ff7a1a,#8b5cf6)}
+:root[data-season="halloween"] .classlist li.active{background:linear-gradient(135deg,rgba(255,122,26,.85),rgba(139,92,246,.8))}
+:root[data-season="halloween"] .brand,
+:root[data-season="halloween"] .topbar h2,
+:root[data-season="halloween"] .winner .name,
+:root[data-season="halloween"] #spin,
+:root[data-season="halloween"] .tagline{font-family:"Creepster","Outfit",system-ui,sans-serif;letter-spacing:.04em;font-weight:400}
+:root[data-season="halloween"] .brand{font-size:24px}
+:root[data-season="halloween"] .winner .name{font-size:44px;background:linear-gradient(90deg,#ff9a3c,#c4a5ff);-webkit-background-clip:text;background-clip:text}
+:root[data-season="halloween"] .tagline{background:linear-gradient(90deg,#ff7a1a,#a78bfa,#7cff4f);-webkit-background-clip:text;background-clip:text;font-size:20px}
+:root[data-season="halloween"] #spin{font-size:22px}
+/* Hut auf dem Logo (Hexenhut / Weihnachtsmütze) */
+:root[data-season="halloween"]{--hat:url(halloween/hat.svg)}
+:root[data-season="christmas"]{--hat:url(christmas/santahat.svg)}
+.brand{position:relative}
+.authlogo{position:relative}
+.mobilebar{position:relative}
+:root[data-season="halloween"] aside .brand::before,
+:root[data-season="christmas"] aside .brand::before{content:"";position:absolute;left:-6px;top:-20px;width:40px;height:32px;
+  background:var(--hat) no-repeat center/contain;transform:rotate(-14deg);pointer-events:none}
+:root[data-season="halloween"] .authlogo::after,
+:root[data-season="christmas"] .authlogo::after{content:"";position:absolute;left:50%;top:-34px;width:90px;height:72px;margin-left:-62px;
+  background:var(--hat) no-repeat center/contain;transform:rotate(-16deg)}
+:root[data-season="halloween"] .mobilebar::after,
+:root[data-season="christmas"] .mobilebar::after{content:"";position:absolute;left:52px;top:-6px;width:26px;height:21px;
+  background:var(--hat) no-repeat center/contain;transform:rotate(-14deg)}
+/* Spinnennetz in der Ecke der Rad-Karte */
+:root[data-season="halloween"] .wheelcard::before{content:"";position:absolute;left:0;top:0;width:170px;height:170px;
+  background:url(halloween/web.svg) no-repeat top left/contain;opacity:.8;pointer-events:none}
+:root[data-season="halloween"] .wheelcard::after{content:"";position:absolute;right:0;top:0;width:150px;height:150px;
+  background:url(halloween/web.svg) no-repeat top left/contain;transform:scaleX(-1);opacity:.6;pointer-events:none}
+/* Zeiger: Kürbis-Orange/Lila */
+:root[data-season="halloween"] .pointer .s1{stop-color:#ffe0b0}
+:root[data-season="halloween"] .pointer .s2{stop-color:#ff7a1a}
+:root[data-season="halloween"] .pointer .s3{stop-color:#7c2d12}
+/* Nabe dunkel mit Kürbis */
+:root[data-season="halloween"] .hub{background:radial-gradient(circle at 40% 30%,#3b1a52 0%,#1a0d29 70%);
+  box-shadow:0 0 0 6px rgba(255,122,26,.25),0 0 0 9px rgba(139,92,246,.6),0 0 40px rgba(255,122,26,.45),0 12px 30px rgba(0,0,0,.5)}
+:root[data-season="halloween"] .hub img{width:82%;height:82%}
+#seasonBtn.on{background:linear-gradient(135deg,color-mix(in srgb,var(--accent) 40%,transparent),color-mix(in srgb,var(--accent-2) 40%,transparent));border-color:color-mix(in srgb,var(--accent) 60%,transparent)}
+/* Fledermäuse: kurze Einzel-Animation, danach wird das Element entfernt */
+.bat{position:fixed;width:70px;height:35px;z-index:9998;pointer-events:none;
+  animation:batfly 4.5s cubic-bezier(.4,.1,.6,.9) forwards}
+@keyframes batfly{
+  0%{transform:translate(0,0) scale(var(--s)) rotate(0)}
+  15%{transform:translate(calc(var(--dx)*18vw),calc(var(--dy)*.3)) scale(calc(var(--s)*1.05),calc(var(--s)*.7))}
+  30%{transform:translate(calc(var(--dx)*35vw),calc(var(--dy)*.5)) scale(var(--s))}
+  45%{transform:translate(calc(var(--dx)*52vw),calc(var(--dy)*.4)) scale(calc(var(--s)*1.05),calc(var(--s)*.7))}
+  60%{transform:translate(calc(var(--dx)*70vw),calc(var(--dy)*.7)) scale(var(--s))}
+  80%{transform:translate(calc(var(--dx)*90vw),calc(var(--dy)*.9)) scale(calc(var(--s)*1.05),calc(var(--s)*.7))}
+  100%{transform:translate(calc(var(--dx)*115vw),var(--dy)) scale(var(--s))}
+}
+
+/* =================== Weihnachts-Theme =================== */
+:root[data-season="christmas"]{
+  --accent:#e11d2e; --accent-2:#22c55e; --accent-3:#f5b800;
+  --blob1:rgba(225,29,46,.26); --blob2:rgba(22,163,74,.24); --blob3:rgba(245,184,0,.16);
+}
+:root[data-season="christmas"][data-theme="dark"]{ --bg:#0a0f14; --bg2:#121c24; }
+:root[data-season="christmas"] body{
+  background-image:
+    radial-gradient(2px 2px at 12% 18%, rgba(255,255,255,.8), transparent 60%),
+    radial-gradient(2px 2px at 32% 8%, rgba(255,255,255,.6), transparent 60%),
+    radial-gradient(1.5px 1.5px at 58% 22%, rgba(255,255,255,.7), transparent 60%),
+    radial-gradient(2px 2px at 82% 14%, rgba(255,255,255,.7), transparent 60%),
+    radial-gradient(1.5px 1.5px at 92% 38%, rgba(255,255,255,.5), transparent 60%),
+    radial-gradient(1.5px 1.5px at 6% 52%, rgba(255,255,255,.5), transparent 60%),
+    radial-gradient(900px 600px at 10% -10%, var(--blob1), transparent 60%),
+    radial-gradient(700px 500px at 100% 10%, var(--blob2), transparent 60%),
+    radial-gradient(800px 600px at 60% 120%, var(--blob3), transparent 60%);
+}
+:root[data-season="christmas"] .btn.primary,
+:root[data-season="christmas"] .chip.on,
+:root[data-season="christmas"] .avatar.sm{background:linear-gradient(135deg,#e11d2e,#15803d)}
+:root[data-season="christmas"] .classlist li.active{background:linear-gradient(135deg,rgba(225,29,46,.85),rgba(21,128,61,.85))}
+:root[data-season="christmas"] .brand,
+:root[data-season="christmas"] .topbar h2,
+:root[data-season="christmas"] .winner .name,
+:root[data-season="christmas"] #spin,
+:root[data-season="christmas"] .tagline{font-family:"Mountains of Christmas","Outfit",system-ui,serif;font-weight:700}
+:root[data-season="christmas"] .brand{font-size:24px}
+:root[data-season="christmas"] .winner .name{font-size:44px;background:linear-gradient(90deg,#ff6b6b,#f5d76e,#6ee7a0);-webkit-background-clip:text;background-clip:text}
+:root[data-season="christmas"] .tagline{background:linear-gradient(90deg,#ff6b6b,#f5d76e,#6ee7a0);-webkit-background-clip:text;background-clip:text;font-size:20px}
+:root[data-season="christmas"] #spin{font-size:22px}
+/* Schneehauben auf den Karten */
+:root[data-season="christmas"] .glass{box-shadow:var(--shadow),inset 0 5px 0 -1px rgba(255,255,255,.75)}
+/* Zeiger: Rot/Gold */
+:root[data-season="christmas"] .pointer .s1{stop-color:#fff3b0}
+:root[data-season="christmas"] .pointer .s2{stop-color:#e11d2e}
+:root[data-season="christmas"] .pointer .s3{stop-color:#7a0b16}
+/* Nabe: Christbaumkugel auf Tannengrün */
+:root[data-season="christmas"] .hub{background:radial-gradient(circle at 40% 30%,#1f6b3a 0%,#0c2e19 75%);
+  box-shadow:0 0 0 6px rgba(255,255,255,.25),0 0 0 9px rgba(245,184,0,.7),0 0 36px rgba(245,184,0,.4),0 12px 30px rgba(0,0,0,.5)}
+:root[data-season="christmas"] .hub img{width:84%;height:84%}

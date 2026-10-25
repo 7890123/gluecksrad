@@ -31,6 +31,8 @@ Alt (lokal gebaut):
 Update: `podman build --format docker -t gluecksrad .` und `systemctl --user restart gluecksrad`.
 
 ## Funktionen
+- **Saison-Themes** (Button ✨/🎃/🎄 im Menü, pro Benutzer gespeichert): Halloween (Kürbis-Nabe, Hexenhut, Spinnennetze,
+  Fledermäuse, Gruselsounds) und Weihnachten (Christbaumkugel, Weihnachtsmütze, Schneefall beim Drehen, Jingle Bells).
 - **Als App installierbar (PWA)**: unter HTTPS in Chrome/Android „App installieren“ (oder Button 📲 im Menü),
   iPhone: Teilen → „Zum Home-Bildschirm“. Eigenes Icon, Vollbild, Handy-Layout mit Menü ☰.
 - **Benutzerverwaltung**: Anmeldung mit Passwort (PBKDF2-Hash, HttpOnly-Session-Cookie, Sperre nach 5 Fehlversuchen für 1 Minute).
