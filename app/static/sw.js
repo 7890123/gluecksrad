@@ -1,6 +1,6 @@
 /* Service Worker: macht die App installierbar und startet auch bei schlechtem WLAN.
    Strategie: Netzwerk zuerst (Updates kommen sofort an), Cache nur als Rückfall. API wird nie gecacht. */
-const CACHE = "gluecksrad-v3";
+const CACHE = "gluecksrad-v4";
 const SHELL = ["/", "/style.css", "/app.js", "/sound.js", "/logo.png", "/favicon.png", "/icon-192.png", "/manifest.webmanifest"];
 
 self.addEventListener("install", e => {

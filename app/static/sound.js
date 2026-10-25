@@ -171,6 +171,24 @@ const Sound = (() => {
     },
   };
 
+  /* ---------- Ostern ---------- */
+  function chirp(t, f = 3200) {   // Vogelgezwitscher
+    voice(f, t, .09, { vol: .08, to: f * 1.35 }); voice(f * 1.1, t + .1, .07, { vol: .06, to: f * .9 });
+  }
+  function marimba(f, t, d = .5, v = .22) { tone(f, t, d, { type: "sine", vol: v, attack: .002 }); tone(f * 4, t, d * .25, { type: "sine", vol: v * .15, attack: .002 }); }
+  const EASTER = {
+    win(t) {   // fröhlicher Marimba-Lauf (Pentatonik) + Vogelgezwitscher
+      [523.25, 587.33, 659.25, 783.99, 880, 1046.5, 880, 1046.5, 1318.5].forEach((f, i) => marimba(f, t + i * .085, i === 8 ? .9 : .35));
+      [0, .25, .5, 1.05].forEach(d => chirp(t + .4 + d, 2800 + Math.random() * 900));
+    },
+    removed(t) { [659.25, 783.99, 1046.5, 1318.5, 1568].forEach((f, i) => marimba(f, t + i * .07, .5, .18)); chirp(t + .45); },
+    kept(t) { marimba(659.25, t, .35); marimba(523.25, t + .2, .5); },
+    added(t) {   // „Boing!“ wie ein hüpfender Hase
+      voice(180, t, .5, { type: "sine", vol: .25, to: 520, vib: 30, rate: 18 });
+      voice(520, t + .45, .35, { type: "sine", vol: .15, to: 260 });
+    },
+  };
+
   /* ---------- Gewinn-Varianten ---------- */
   const WINS = {
     fanfare(t) {
@@ -272,14 +290,16 @@ const Sound = (() => {
         if (kind === "custom") { if (custom.win) playBuffer(custom.win); else WINS.fanfare(t); }
         else if (season === "halloween" && kind !== "none" && !preset) SPOOKY.win(t);
         else if (season === "christmas" && kind !== "none" && !preset) XMAS.win(t);
+        else if (season === "easter" && kind !== "none" && !preset) EASTER.win(t);
         else (WINS[kind] || WINS.fanfare)(t);
       });
     },
-    removed() { if (season === "halloween") return play(t => SPOOKY.removed(t)); if (season === "christmas") return play(t => XMAS.removed(t)); play(t => [783.99, 1046.5, 1318.5, 1568, 2093].forEach((f, i) => tone(f, t + i * 0.07, 0.45, { type: "sine", vol: 0.2 }))); },
-    kept() { if (season === "halloween") return play(t => SPOOKY.kept(t)); if (season === "christmas") return play(t => XMAS.kept(t)); play(t => { tone(659.25, t, 0.22, { type: "triangle", vol: 0.2 }); tone(659.25, t + 0.18, 0.3, { type: "triangle", vol: 0.2 }); }); },
+    removed() { if (season === "halloween") return play(t => SPOOKY.removed(t)); if (season === "christmas") return play(t => XMAS.removed(t)); if (season === "easter") return play(t => EASTER.removed(t)); play(t => [783.99, 1046.5, 1318.5, 1568, 2093].forEach((f, i) => tone(f, t + i * 0.07, 0.45, { type: "sine", vol: 0.2 }))); },
+    kept() { if (season === "halloween") return play(t => SPOOKY.kept(t)); if (season === "christmas") return play(t => XMAS.kept(t)); if (season === "easter") return play(t => EASTER.kept(t)); play(t => { tone(659.25, t, 0.22, { type: "triangle", vol: 0.2 }); tone(659.25, t + 0.18, 0.3, { type: "triangle", vol: 0.2 }); }); },
     added() {
       if (season === "halloween") return play(t => SPOOKY.added(t));
       if (season === "christmas") return play(t => XMAS.added(t));
+      if (season === "easter") return play(t => EASTER.added(t));
       play(t => [392, 370, 349.2, 329.6].forEach((f, i) =>
         tone(f, t + i * 0.28, i === 3 ? 0.9 : 0.3, { type: "sawtooth", vol: 0.12, filter: 900, glideTo: i === 3 ? 300 : null })));
     },

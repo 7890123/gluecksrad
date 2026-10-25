@@ -35,11 +35,21 @@ const SEASONS = {
     rim: ["#7a0b16", "#2b0508", "#14532d"], bulbs: ["255,236,170", "255,80,80", "110,231,140"],
     confetti: ["#e11d2e", "#16a34a", "#f5b800", "#ffffff", "#bfe3ff", "#7a0b16"], emoji: ["❄️", "🎁", "⭐", "🎄", "🔔", "🍪"],
     font: { family: "Mountains of Christmas", url: "https://fonts.googleapis.com/css2?family=Mountains+of+Christmas:wght@700&display=swap" } },
+  easter: { icon: "🐰", name: "Ostern", hub: "easter/egg.svg", spin: "🐰 Hoppeln!", winLabel: "Der Osterhase bringt …", tagline: "Wer findet das Ei?",
+    out: { removed: "hat alle Eier gefunden 🧺 (raus)", kept: "hoppelt weiter 🐰", added: "bekommt ein Extra-Ei 🥚 (+1 im Rad)" },
+    short: { removed: "gefunden", kept: "hoppelt", added: "+1 Ei" },
+    // Rosa, Minze, Zitrone, Lavendel, Himmelblau, Pfirsich – kräftig genug für weiße Schrift
+    palette: [[333, 72, 58], [160, 52, 40], [45, 92, 46], [265, 52, 58], [200, 72, 48], [18, 86, 57]],
+    rim: ["#6fbf6a", "#2f7a3a", "#9ad48a"], bulbs: ["255,170,210", "255,236,140", "150,220,255"],
+    confetti: ["#ff9ac4", "#9ee6c9", "#fff08a", "#c9b6ff", "#9ad8ff", "#ffffff"], emoji: ["🥚", "🐣", "🐰", "🌷", "🐥", "🥕"],
+    font: { family: "Fredoka", url: "https://fonts.googleapis.com/css2?family=Fredoka:wght@600&display=swap" } },
 };
 const seasonKey = () => SEASONS[document.documentElement.dataset.season] ? document.documentElement.dataset.season : "none";
 const SEASON = () => SEASONS[seasonKey()];
 const isHW = () => seasonKey() === "halloween";
 const isXmas = () => seasonKey() === "christmas";
+const isEaster = () => seasonKey() === "easter";
+const NEXT_SEASON = { none: "halloween", halloween: "christmas", christmas: "easter", easter: "none" };
 const OUT_TEXT = new Proxy({}, { get: (_, k) => SEASON().out[k] });
 const OUT_SHORT = new Proxy({}, { get: (_, k) => SEASON().short[k] });
 const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
@@ -198,6 +208,7 @@ function renderWheelTab() {
     </div>`;
   drawWheel();
   setHub(hubAngle);
+  if (isEaster()) hideEgg();
   setControls();
   $("#spin").onclick = $("#hub").onclick = spin;
   $("#shuffleBtn").onclick = shuffle;
@@ -411,6 +422,7 @@ function spin() {
     safe(() => Sound.win()); safe(() => confetti(70, { x: innerWidth / 2, y: innerHeight * 0.35 }));
     if (isHW()) bats(4);
     if (isXmas()) snow(5000, 90);
+    if (isEaster()) bunnies(1);
     animateWinner(); setControls();
     setTimeout(() => { state.pendingRating = false; openRating(segs[pos], pos); }, 650);
   };
@@ -640,7 +652,7 @@ function applySeason(s, save = false) {
   const S = SEASONS[s];
   store.set("season", s);
   safe(() => Sound.setSeason(s));
-  const next = SEASONS[{ none: "halloween", halloween: "christmas", christmas: "none" }[s]];
+  const next = SEASONS[NEXT_SEASON[s]];
   $("#seasonBtn").textContent = S.icon;
   $("#seasonBtn").classList.toggle("on", s !== "none");
   $("#seasonBtn").title = `Theme: ${S.name} – klicken für ${next.name}`;
@@ -669,12 +681,45 @@ function bats(n) {
     document.body.appendChild(b);
   }
 }
+// Osterhase hoppelt einmal über den unteren Bildschirmrand
+function bunnies(n) {
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  for (let i = 0; i < n; i++) {
+    const w = document.createElement("div"); w.className = "bunny"; w.style.animationDelay = i * .7 + "s";
+    if (Math.random() < .5) w.classList.add("rtl");
+    w.innerHTML = '<img src="easter/bunny.svg" alt="">';
+    w.addEventListener("animationend", () => w.remove());
+    document.body.appendChild(w);
+  }
+}
+// Ostereier-Suche: im Glücksrad-Tab versteckt sich irgendwo ein kleines Ei
+let eggsFound = 0;
+function hideEgg() {
+  document.querySelectorAll(".hidden-egg").forEach(e => e.remove());
+  if (!isEaster() || state.tab !== "wheel") return;
+  const spots = [...document.querySelectorAll("#tab .panel, #tab .wheelcard, .topbar")];
+  if (!spots.length) return;
+  const host = spots[Math.floor(Math.random() * spots.length)];
+  const egg = document.createElement("img");
+  egg.src = "easter/egg.svg"; egg.className = "hidden-egg"; egg.alt = "Osterei"; egg.title = "Nanu?";
+  const corner = [["left", "top"], ["right", "top"], ["left", "bottom"], ["right", "bottom"]][Math.floor(Math.random() * 4)];
+  egg.style.cssText = `${corner[0]}:${rand(6, 30)}px;${corner[1]}:${rand(4, 14)}px;transform:rotate(${rand(-35, 35)}deg)`;
+  egg.onclick = e => {
+    e.stopPropagation(); eggsFound++;
+    const r = egg.getBoundingClientRect(); egg.remove();
+    safe(() => { Sound.unlock(); Sound.removed(); }); confetti(50, { x: r.left + r.width / 2, y: r.top });
+    toast(eggsFound === 1 ? "🥚 Osterei gefunden!" : `🥚 Schon ${eggsFound} Ostereier gefunden!`);
+  };
+  host.appendChild(egg);
+}
+
 $("#seasonBtn").onclick = () => {
-  const next = { none: "halloween", halloween: "christmas", christmas: "none" }[seasonKey()];
+  const next = NEXT_SEASON[seasonKey()];
   applySeason(next, true);
   safe(() => Sound.unlock());
   if (next === "halloween") { bats(3); safe(() => Sound.added()); toast("🎃 Halloween-Modus an – Muahaha!"); }
   else if (next === "christmas") { snow(5000, 120); safe(() => Sound.win()); toast("🎄 Weihnachts-Modus an – Ho ho ho!"); }
+  else if (next === "easter") { bunnies(2); safe(() => Sound.win()); toast("🐰 Oster-Modus an – fröhliches Eiersuchen!"); }
   else toast("Standard-Theme");
 };
 applySeason(store.get("season") || "none");

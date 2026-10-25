@@ -426,7 +426,7 @@ def auth_route(con, method, parts, body, ctx):
                         st["volume"] = max(0.0, min(1.0, float(body["volume"])))
                     except (TypeError, ValueError):
                         pass
-                if body.get("season") in ("none", "halloween", "christmas"): st["season"] = body["season"]
+                if body.get("season") in ("none", "halloween", "christmas", "easter"): st["season"] = body["season"]
                 con.execute("UPDATE users SET settings=? WHERE id=?", (json.dumps(st), user["id"]))
                 return {"settings": st}
         if len(parts) == 3 and parts[1] == "sounds" and parts[2] in SOUND_KINDS:

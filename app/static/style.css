@@ -259,17 +259,21 @@ button,.chip,.hub,a{touch-action:manipulation;-webkit-tap-highlight-color:transp
 /* Hut auf dem Logo (Hexenhut / Weihnachtsmütze) */
 :root[data-season="halloween"]{--hat:url(halloween/hat.svg)}
 :root[data-season="christmas"]{--hat:url(christmas/santahat.svg)}
+:root[data-season="easter"]{--hat:url(easter/ears.svg)}
 .brand{position:relative}
 .authlogo{position:relative}
 .mobilebar{position:relative}
 :root[data-season="halloween"] aside .brand::before,
-:root[data-season="christmas"] aside .brand::before{content:"";position:absolute;left:-6px;top:-20px;width:40px;height:32px;
+:root[data-season="christmas"] aside .brand::before,
+:root[data-season="easter"] aside .brand::before{content:"";position:absolute;left:-6px;top:-20px;width:40px;height:32px;
   background:var(--hat) no-repeat center/contain;transform:rotate(-14deg);pointer-events:none}
 :root[data-season="halloween"] .authlogo::after,
-:root[data-season="christmas"] .authlogo::after{content:"";position:absolute;left:50%;top:-34px;width:90px;height:72px;margin-left:-62px;
+:root[data-season="christmas"] .authlogo::after,
+:root[data-season="easter"] .authlogo::after{content:"";position:absolute;left:50%;top:-34px;width:90px;height:72px;margin-left:-62px;
   background:var(--hat) no-repeat center/contain;transform:rotate(-16deg)}
 :root[data-season="halloween"] .mobilebar::after,
-:root[data-season="christmas"] .mobilebar::after{content:"";position:absolute;left:52px;top:-6px;width:26px;height:21px;
+:root[data-season="christmas"] .mobilebar::after,
+:root[data-season="easter"] .mobilebar::after{content:"";position:absolute;left:52px;top:-6px;width:26px;height:21px;
   background:var(--hat) no-repeat center/contain;transform:rotate(-14deg)}
 /* Spinnennetz in der Ecke der Rad-Karte */
 :root[data-season="halloween"] .wheelcard::before{content:"";position:absolute;left:0;top:0;width:170px;height:170px;
@@ -339,3 +343,48 @@ button,.chip,.hub,a{touch-action:manipulation;-webkit-tap-highlight-color:transp
 :root[data-season="christmas"] .hub{background:radial-gradient(circle at 40% 30%,#1f6b3a 0%,#0c2e19 75%);
   box-shadow:0 0 0 6px rgba(255,255,255,.25),0 0 0 9px rgba(245,184,0,.7),0 0 36px rgba(245,184,0,.4),0 12px 30px rgba(0,0,0,.5)}
 :root[data-season="christmas"] .hub img{width:84%;height:84%}
+
+/* =================== Oster-Theme =================== */
+:root[data-season="easter"]{
+  --accent:#ff6fa8; --accent-2:#4cc9a0; --accent-3:#ffd84d;
+  --blob1:rgba(255,143,184,.30); --blob2:rgba(124,197,118,.26); --blob3:rgba(150,200,255,.22);
+}
+:root[data-season="easter"][data-theme="dark"]{ --bg:#141022; --bg2:#1d1830; }
+:root[data-season="easter"] .btn.primary,
+:root[data-season="easter"] .chip.on,
+:root[data-season="easter"] .avatar.sm{background:linear-gradient(135deg,#ff6fa8,#7cc576)}
+:root[data-season="easter"] .classlist li.active{background:linear-gradient(135deg,rgba(255,111,168,.85),rgba(124,197,118,.85))}
+:root[data-season="easter"] .brand,
+:root[data-season="easter"] .topbar h2,
+:root[data-season="easter"] .winner .name,
+:root[data-season="easter"] #spin,
+:root[data-season="easter"] .tagline{font-family:"Fredoka","Outfit",system-ui,sans-serif;font-weight:600}
+:root[data-season="easter"] .winner .name{font-size:40px;background:linear-gradient(90deg,#ff8fb8,#ffe066,#7fdcb4,#9ad8ff);-webkit-background-clip:text;background-clip:text}
+:root[data-season="easter"] .tagline{background:linear-gradient(90deg,#ff8fb8,#ffd84d,#7fdcb4);-webkit-background-clip:text;background-clip:text;font-size:19px}
+:root[data-season="easter"] #spin{font-size:21px}
+/* Wiese am unteren Rand der Rad-Karte, mit ein paar versteckten Eiern */
+:root[data-season="easter"] .wheelcard{padding-bottom:44px}
+:root[data-season="easter"] .wheelcard::after{content:"";position:absolute;left:0;right:0;bottom:0;height:34px;pointer-events:none;
+  background:url(easter/egg.svg) no-repeat 12% 70%/18px 18px, url(easter/egg.svg) no-repeat 86% 80%/15px 15px,
+             url(easter/grass.svg) repeat-x bottom/400px 34px}
+/* Zeiger: Rosa/Gelb */
+:root[data-season="easter"] .pointer .s1{stop-color:#fffbe0}
+:root[data-season="easter"] .pointer .s2{stop-color:#ff8fb8}
+:root[data-season="easter"] .pointer .s3{stop-color:#c2477a}
+/* Nabe: bemaltes Osterei im Nest */
+:root[data-season="easter"] .hub{background:radial-gradient(circle at 45% 40%,#f3e2b8 0%,#c99a5b 55%,#8a5a2b 100%);
+  box-shadow:0 0 0 6px rgba(255,255,255,.3),0 0 0 9px rgba(255,143,184,.7),0 12px 30px rgba(0,0,0,.45)}
+:root[data-season="easter"] .hub img{width:80%;height:80%}
+/* Osterhase hoppelt quer über den Bildschirm */
+.bunny{position:fixed;bottom:10px;left:-120px;width:90px;height:81px;z-index:9998;pointer-events:none;
+  animation:bunnyrun 5s linear forwards}
+.bunny img{width:100%;height:100%;animation:hop .5s cubic-bezier(.3,0,.7,1) 10 alternate;transform-origin:50% 100%}
+.bunny.rtl{left:auto;right:-120px;animation-name:bunnyrunrtl}
+.bunny.rtl img{scale:-1 1}
+@keyframes bunnyrun{to{transform:translateX(calc(100vw + 240px))}}
+@keyframes bunnyrunrtl{to{transform:translateX(calc(-100vw - 240px))}}
+@keyframes hop{0%{transform:translateY(0) scale(1.05,.92)}40%{transform:translateY(-70px) scale(.96,1.05)}100%{transform:translateY(-90px) rotate(-6deg)}}
+/* Versteckte Ostereier zum Suchen */
+.hidden-egg{position:absolute;width:22px;height:22px;cursor:pointer;z-index:5;opacity:.92;filter:drop-shadow(0 2px 3px rgba(0,0,0,.35));transition:transform .2s}
+.hidden-egg:hover{transform:scale(1.4) rotate(0)!important}
+#tab .panel,.topbar{position:relative}
