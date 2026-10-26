@@ -88,6 +88,7 @@ async function openClass(id, subjectId) {
   setCurrent(c);
 }
 function setCurrent(c) {
+  if (!state.current || !c || state.current.id !== c.id || state.current.subject !== c.subject) state.histFilter = "";
   state.current = c;
   $("#mTitle").textContent = c ? c.name : "Glücksrad";
   store.set("lastSubject:" + c.id, c.subject);
@@ -188,7 +189,7 @@ function renderWheelTab() {
       <div class="side">
         ${last ? `<div class="glass panel"><h3>Zuletzt gezogen</h3>
           <div class="last"><div class="avatar" style="background:${colorFor(last.studentId)}">${esc(initials(last.name))}</div>
-          <div style="flex:1"><b>${esc(last.name)}</b><div class="muted">${last.score} %</div></div>
+          <div style="flex:1;min-width:0"><b>${esc(last.name)}</b><div class="muted">${last.score} %${last.note ? ` · <span title="${esc(last.note)}">${esc(last.note.length > 40 ? last.note.slice(0, 40) + "…" : last.note)}</span>` : ""}</div></div>
           <span class="pill o-${last.outcome}">${OUT_SHORT[last.outcome]}</span></div></div>` : ""}
         <div class="glass panel">
           <h3>Name hinzufügen</h3>
@@ -504,8 +505,15 @@ function setScore(v) {
   box.className = "result o-" + o; box.textContent = `${state.drawn ? state.drawn.name : ""} ${OUT_TEXT[o]}`;
 }
 range.oninput = () => setScore(range.value);
+// Schnell-Notizen: Klick fügt den Text ins Notizfeld ein
+const NOTE_CHIPS = ["Hausübung fehlt", "gut vorbereitet", "Vokabeln", "Tafel", "Wiederholung", "mündlich", "nachfragen"];
+$("#noteChips").innerHTML = NOTE_CHIPS.map(t => `<button type="button" class="chip">${esc(t)}</button>`).join("");
+$("#noteChips").querySelectorAll(".chip").forEach(b => b.onclick = () => {
+  const ta = $("#noteInput"); ta.value = (ta.value.trim() ? ta.value.trim() + ", " : "") + b.textContent; ta.focus();
+});
 function openRating(s, pos) {
   state.drawn = s; state.drawnPos = pos;
+  $("#noteInput").value = "";
   $("#winnerName").textContent = s.name;
   $("#winLabel").textContent = SEASON().winLabel;
   const av = $("#winAvatar"); av.textContent = initials(s.name); av.style.background = `linear-gradient(135deg, ${colorFor(s.id, 62)}, ${colorFor(s.id, 42)})`;
@@ -516,19 +524,21 @@ $("#skipBtn").onclick = closeRating;
 dlg.addEventListener("cancel", e => { e.preventDefault(); closeRating(); });
 $("#saveBtn").onclick = async () => {
   const c = state.current, s = state.drawn; if (!s) return;
-  const score = +range.value, o = outcomeOf(score), pos = state.drawnPos;
+  const score = +range.value, o = outcomeOf(score), pos = state.drawnPos, note = $("#noteInput").value.trim();
   dlg.close(); state.drawn = null; state.winnerPos = null;
   safe(() => Sound[o]());
   if (o === "removed") safe(() => confetti(180));
   try {
-    const c2 = await api("POST", `/classes/${c.id}/subjects/${c.subject}/rate`, { studentId: s.id, score, position: pos });
+    const c2 = await api("POST", `/classes/${c.id}/subjects/${c.subject}/rate`, { studentId: s.id, score, position: pos, note });
     if (o === "added") flashStudents([s.id]);
     setCurrent(c2);
   } catch (e) { renderMain(); }
 };
 document.addEventListener("keydown", e => {
   if (dlg.open) {
-    if (e.key === "Enter") { e.preventDefault(); $("#saveBtn").click(); }
+    const typing = document.activeElement && document.activeElement.id === "noteInput";
+    if (e.key === "Enter" && !(typing && e.shiftKey)) { e.preventDefault(); $("#saveBtn").click(); }
+    else if (typing) return;   // beim Tippen der Notiz keine Pfeiltasten-Bewertung
     else if (e.key === "ArrowRight" || e.key === "ArrowUp") { e.preventDefault(); setScore(+range.value + 5); }
     else if (e.key === "ArrowLeft" || e.key === "ArrowDown") { e.preventDefault(); setScore(+range.value - 5); }
     return;
@@ -619,13 +629,21 @@ function renderStudentsTab() {
 
 /* ---------------- Verlauf ---------------- */
 function renderHistoryTab() {
-  const c = state.current, rates = c.history.filter(h => h.type === "rate");
+  const c = state.current, filter = state.histFilter || "";
+  const rates = c.history.filter(h => h.type === "rate" && (!filter || h.studentId === filter));   // Statistik passt zum Filter
   const fmt = ts => new Date(ts * 1000).toLocaleString("de-AT", { dateStyle: "short", timeStyle: "short" });
   const avg = rates.length ? Math.round(rates.reduce((s, h) => s + h.score, 0) / rates.length) : "–";
   const cnt = o => rates.filter(h => h.outcome === o).length;
-  const rows = c.history.map(h => h.type === "reset"
-    ? `<tr><td>${fmt(h.ts)}</td><td colspan="3" class="muted">↺ Rad zurückgesetzt</td></tr>`
-    : `<tr><td>${fmt(h.ts)}</td><td>${esc(h.name)}</td><td>${h.score} %</td><td><span class="pill o-${h.outcome}">${OUT_SHORT[h.outcome]}</span></td></tr>`).join("");
+  const shown = c.history.filter(h => !filter || (h.type === "rate" && h.studentId === filter));
+  const team = c.members && c.members.length > 0;
+  const rows = shown.map(h => h.type === "reset"
+    ? `<tr><td>${fmt(h.ts)}</td><td colspan="4" class="muted">↺ Rad zurückgesetzt</td></tr>`
+    : `<tr><td class="nowrap">${fmt(h.ts)}${team && h.by ? `<div class="muted small">${esc(h.by)}</div>` : ""}</td>
+        <td><a href="#" class="stud" data-stud="${h.studentId}">${esc(h.name)}</a></td><td class="nowrap">${h.score} %</td>
+        <td><span class="pill o-${h.outcome}">${OUT_SHORT[h.outcome]}</span></td>
+        <td class="notecell"><span class="notetext">${h.note ? esc(h.note) : '<span class="muted">–</span>'}</span>
+          <button class="btn ghost icon small" data-note="${h.id}" title="Notiz bearbeiten">✏️</button></td></tr>`).join("");
+  const fname = filter ? (c.students.find(s => s.id === filter) || {}).name : "";
   $("#tab").innerHTML = `<div class="glass card">
     <div class="stats">
       <div class="stat"><span class="muted">Ziehungen</span><b>${rates.length}</b></div>
@@ -634,11 +652,20 @@ function renderHistoryTab() {
       <div class="stat"><span class="muted">Bleibt</span><b style="color:var(--mid)">${cnt("kept")}</b></div>
       <div class="stat"><span class="muted">+1 im Rad</span><b style="color:var(--bad)">${cnt("added")}</b></div>
     </div>
-    ${c.history.length ? `<table><tr><th>Zeit</th><th>Name</th><th>Bewertung</th><th>Folge</th></tr>${rows}</table>
-      <div style="margin-top:14px"><button class="btn danger" id="clearHist">Verlauf leeren</button></div>`
+    ${filter ? `<div class="filterbar">Nur <b>${esc(fname || "?")}</b> <button class="btn ghost small" id="clearFilter">✕ alle anzeigen</button></div>` : ""}
+    ${shown.length ? `<div class="tablewrap"><table class="hist"><tr><th>Zeit</th><th>Name</th><th>Bewertung</th><th>Folge</th><th>Notiz</th></tr>${rows}</table></div>
+      ${filter ? "" : `<div style="margin-top:14px"><button class="btn danger" id="clearHist">Verlauf leeren</button></div>`}`
       : `<div class="muted">Noch keine Ziehungen.</div>`}</div>`;
   const b = $("#clearHist");
-  if (b) b.onclick = async () => { if (confirm("Verlauf wirklich leeren?")) setCurrent(await api("DELETE", subjUrl("/history"))); };
+  if (b) b.onclick = async () => { if (confirm("Verlauf wirklich leeren? Dabei gehen auch alle Notizen verloren.")) setCurrent(await api("DELETE", subjUrl("/history"))); };
+  if ($("#clearFilter")) $("#clearFilter").onclick = () => { state.histFilter = ""; renderHistoryTab(); };
+  document.querySelectorAll("a.stud").forEach(a => a.onclick = e => { e.preventDefault(); state.histFilter = a.dataset.stud; renderHistoryTab(); });
+  document.querySelectorAll("[data-note]").forEach(btn => btn.onclick = async () => {
+    const h = c.history.find(x => String(x.id) === btn.dataset.note);
+    const n = prompt(`Notiz zu ${h.name} (${h.score} %):`, h.note || "");
+    if (n === null) return;
+    setCurrent(await api("PUT", subjUrl("/history/" + h.id), { note: n }));
+  });
 }
 
 /* ---------------- Start ---------------- */

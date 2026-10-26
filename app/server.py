@@ -158,6 +158,10 @@ def init_db():
             hcols = [r[1] for r in con.execute("PRAGMA table_info(history)")]
             if "subject_id" not in hcols:
                 con.execute("ALTER TABLE history ADD COLUMN subject_id TEXT")
+            if "note" not in hcols:
+                con.execute("ALTER TABLE history ADD COLUMN note TEXT")
+            if "rated_by" not in hcols:
+                con.execute("ALTER TABLE history ADD COLUMN rated_by TEXT")
             migrate_v1(con)
             migrate_subjects(con)
             con.execute("DELETE FROM sessions WHERE expires_at < ?", (int(time.time()),))
@@ -205,6 +209,13 @@ def migrate_subjects(con):
 # ---------------------------------------------------------------- Helpers ---
 def new_id():
     return secrets.token_hex(5)
+
+
+def clean_note(n):
+    """Notiz: Zeilenumbrüche erlaubt, max. 500 Zeichen."""
+    n = re.sub(r"[ \t]+", " ", str(n or "")).strip()
+    n = re.sub(r"\n{3,}", "\n\n", n.replace("\r", ""))
+    return n[:500]
 
 
 def clean_name(n):
@@ -257,8 +268,8 @@ def class_obj(con, cid, subj=None):
         return class_obj(con, cid)
     if subj not in {x["id"] for x in subjects}:
         subj = subjects[0]["id"]
-    history = [{"ts": r["ts"], "type": r["type"], "studentId": r["student_id"], "name": r["name"],
-                "score": r["score"], "outcome": r["outcome"]}
+    history = [{"id": r["id"], "ts": r["ts"], "type": r["type"], "studentId": r["student_id"], "name": r["name"],
+                "score": r["score"], "outcome": r["outcome"], "note": r["note"] or "", "by": r["rated_by"] or ""}
                for r in con.execute("SELECT * FROM history WHERE subject_id=? ORDER BY id DESC LIMIT 1000", (subj,))]
     return {"id": c["id"], "name": c["name"], "students": students, "subjects": subjects,
             "subject": subj, "pool": read_pool(con, subj), "history": history}
@@ -725,6 +736,18 @@ def route(con, method, parts, body, user):
                     (cid, subj, int(time.time())))
         return class_obj(con, cid, subj)
 
+    if len(rest) == 3 and rest[:2] == ["subject", "history"] and method == "PUT":
+        # Notiz eines Verlaufseintrags nachträglich bearbeiten
+        try:
+            hid = int(rest[2])
+        except ValueError:
+            raise ApiError(404, "Eintrag nicht gefunden")
+        cur = con.execute("UPDATE history SET note=? WHERE id=? AND subject_id=? AND type='rate'",
+                          (clean_note(body.get("note")), hid, need_subject()))
+        if not cur.rowcount:
+            raise ApiError(404, "Eintrag nicht gefunden")
+        return class_obj(con, cid, subj)
+
     if rest == ["subject", "history"] and method == "DELETE":
         con.execute("DELETE FROM history WHERE subject_id=?", (need_subject(),))
         return class_obj(con, cid, subj)
@@ -748,8 +771,10 @@ def route(con, method, parts, body, user):
             insert_random(pool, s["id"])
         write_pool(con, subj, pool)
         con.execute(
-            "INSERT INTO history (class_id, subject_id, ts, type, student_id, name, score, outcome) VALUES (?,?,?,?,?,?,?,?)",
-            (cid, subj, int(time.time()), "rate", s["id"], s["name"], score, outcome))
+            "INSERT INTO history (class_id, subject_id, ts, type, student_id, name, score, outcome, note, rated_by)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (cid, subj, int(time.time()), "rate", s["id"], s["name"], score, outcome,
+             clean_note(body.get("note")), user["username"]))
         return class_obj(con, cid, subj)
 
     raise ApiError(404, "Unbekannte Route")

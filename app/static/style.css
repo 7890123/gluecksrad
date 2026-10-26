@@ -186,6 +186,21 @@ input[type=checkbox]{width:18px;height:18px;accent-color:var(--accent)}
 .btn.small{padding:4px 10px;font-size:13px}
 .teambtn b{background:color-mix(in srgb,var(--accent) 30%,transparent);border-radius:999px;padding:0 7px;font-size:12px;margin-left:2px}
 .classlist .owner{display:block;font-size:11px;opacity:.7}
+.note{width:100%;border:1px solid var(--stroke);border-radius:12px;padding:10px 12px;margin:0 0 6px;resize:vertical;min-height:52px;
+  background:color-mix(in srgb,var(--bg2) 55%,transparent);outline:none;font:inherit;color:inherit}
+.note:focus{border-color:var(--accent);box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 22%,transparent)}
+.notechips{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:16px}
+.notechips .chip{padding:2px 9px;font-size:12px}
+.tablewrap{overflow-x:auto}
+table.hist td{vertical-align:top}
+.notecell{min-width:180px}
+.notecell .notetext{white-space:pre-wrap;word-break:break-word}
+.notecell .btn{float:right;opacity:.35;padding:2px 6px}
+.notecell:hover .btn,.notecell .btn:focus{opacity:1}
+.nowrap{white-space:nowrap}
+a.stud{color:inherit;text-decoration:none;border-bottom:1px dashed color-mix(in srgb,var(--ink) 35%,transparent)}
+a.stud:hover{color:var(--accent)}
+.filterbar{display:flex;align-items:center;gap:8px;margin:-4px 0 12px}
 #confetti{position:fixed;inset:0;pointer-events:none;z-index:9999}
 .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(30px);opacity:0;padding:10px 18px;border-radius:14px;
   background:var(--bg2);border:1px solid var(--stroke);box-shadow:var(--shadow);transition:all .35s;z-index:50}
