@@ -53,9 +53,15 @@ Update: `podman build --format docker -t gluecksrad .` und `systemctl --user res
 - 🎲 **Mischen**: würfelt die Reihenfolge im Rad durch
 - Neue Namen und zusätzliche Einträge (Bewertung < 50 %, „+“) landen an **zufälliger Position**
 - Bewertung nach der Ziehung:
-  - **≥ 70 %** → der gezogene Eintrag fliegt raus
+  - **≥ 70 %** → der gezogene Eintrag fliegt raus (ein Eintrag weniger). War es der letzte, pausiert die/der Schüler/in
+    **3 Wochen** in diesem Fach (⏸ in der Namensliste) und kommt danach automatisch wieder **einmal** ins Rad.
+    „+“ oder „Zurücksetzen“ beenden die Pause sofort.
   - **50–69 %** → bleibt
   - **< 50 %** → zusätzlicher Eintrag an zufälliger Position
+- **Joker 🃏**: Administrator/innen vergeben Joker – allen in einer Klasse („Allen +1 Joker“ bzw. − / + je Name in der
+  Schülerliste) oder allen Schüler/innen aller Klassen (👥 Benutzerverwaltung). Eingesetzt wird ein Joker über 🃏 in der
+  Namensliste oder direkt im Bewertungsdialog nach der Ziehung: die/der Schüler/in ist für den restlichen Tag in keinem Fach
+  der Klasse im Rad, die Einträge bleiben erhalten. Versehentlich eingesetzt → nochmal klicken zum Zurücknehmen.
 - Verlauf mit Statistik, Hell-/Dunkel-Modus, Tastatur: Leertaste = drehen, Enter = speichern, Pfeiltasten = Bewertung
 
 ## Fehler „attempt to write a readonly database“

@@ -55,6 +55,10 @@ const OUT_SHORT = new Proxy({}, { get: (_, k) => SEASON().short[k] });
 const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
 const rand = (a, b) => a + Math.random() * (b - a);
 const initials = n => n.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join("");
+const today = () => new Date().toLocaleDateString("sv");             // JJJJ-MM-TT in Ortszeit
+const jokerToday = s => s.jokerDay === today();                       // Joker eingesetzt -> heute nicht im Rad
+const isAdmin = () => state.user && state.user.role === "admin";
+const fmtDay = ts => new Date(ts * 1000).toLocaleDateString("de-AT", { day: "2-digit", month: "2-digit" });
 
 function studentIndex(id) { return state.current ? state.current.students.findIndex(s => s.id === id) : 0; }
 function hueFor(id) { return (Math.max(0, studentIndex(id)) * 137.508 + 265) % 360; }
@@ -110,6 +114,7 @@ function renderMain() {
   if (state.view === "users") return renderUsers();
   const c = state.current, m = $("#main");
   if (!c) { m.innerHTML = `<div class="glass empty muted">Lege links eine Klasse an oder wähle eine aus.</div>`; return; }
+  const oldPool = m.querySelector(".pool"), poolScroll = oldPool && oldPool.dataset.key === c.id + ":" + c.subject ? oldPool.scrollTop : 0;
   m.innerHTML = `
     <div class="glass topbar">
       <h2>${esc(c.name)}</h2>
@@ -155,12 +160,15 @@ function renderMain() {
     if (n) setCurrent(await api("PUT", "/classes/" + c.id, { name: n, subject: c.subject }));
   };
   ({ wheel: renderWheelTab, students: renderStudentsTab, history: renderHistoryTab })[state.tab]();
+  const newPool = m.querySelector(".pool"); if (newPool && poolScroll) newPool.scrollTop = poolScroll;
 }
 
 /* ---------------- Glücksrad-Tab ---------------- */
+// Segmente im Rad: Einträge von Schüler/innen mit heutigem Joker bleiben gespeichert, werden aber nicht gezeigt.
+// pos = Index im gespeicherten Rad (für die Bewertung)
 function poolSegments() {
   const c = state.current, byId = Object.fromEntries(c.students.map(s => [s.id, s]));
-  return c.pool.filter(id => byId[id]).map(id => byId[id]);
+  return c.pool.map((id, pos) => byId[id] && !jokerToday(byId[id]) ? { ...byId[id], pos } : null).filter(Boolean);
 }
 
 const POINTER_SVG = `<svg class="pointer" id="pointer" viewBox="0 0 54 70">
@@ -184,7 +192,7 @@ function renderWheelTab() {
           <button class="btn primary" id="spin">${SEASON().spin}</button>
           <button class="btn" id="resetBtn" title="Jede/n genau einmal ins Rad">↺ Zurücksetzen</button>
         </div>
-        <div class="hint"><span><b class="g">≥ 70 %</b> raus</span><span><b class="m">50–69 %</b> bleibt</span><span><b class="r">&lt; 50 %</b> +1 im Rad</span><span>Leertaste = drehen</span></div>
+        <div class="hint"><span><b class="g">≥ 70 %</b> −1 (letzter → 3 Wochen Pause)</span><span><b class="m">50–69 %</b> bleibt</span><span><b class="r">&lt; 50 %</b> +1 im Rad</span><span>Leertaste = drehen</span></div>
       </div>
       <div class="side">
         ${last ? `<div class="glass panel"><h3>Zuletzt gezogen</h3>
@@ -197,9 +205,12 @@ function renderWheelTab() {
           <div class="muted" style="font-size:12px;margin-top:6px">Landet an einer zufälligen Stelle im Rad.</div>
         </div>
         <div class="glass panel">
-          <h3><span>Im Rad: ${c.pool.length}</span><span class="muted" style="font-weight:400;font-size:13px">${c.students.length} SuS</span></h3>
-          ${c.students.length ? `<ul class="pool">${c.students.map(s => `
-            <li class="${counts[s.id] ? "" : "out"}"><span class="dot" style="background:${colorFor(s.id)}"></span><span class="n">${esc(s.name)}</span>
+          <h3><span>Im Rad: ${poolSegments().length}</span><span class="muted" style="font-weight:400;font-size:13px">${c.students.length} SuS</span></h3>
+          ${c.students.length ? `<ul class="pool" data-key="${c.id}:${c.subject}">${c.students.map(s => `
+            <li class="${counts[s.id] && !jokerToday(s) ? "" : "out"}"><span class="dot" style="background:${colorFor(s.id)}"></span>
+              <span class="n">${esc(s.name)}${c.pauses[s.id] ? `<small class="state" title="Kommt am ${fmtDay(c.pauses[s.id])} wieder einmal ins Rad">⏸ bis ${fmtDay(c.pauses[s.id])}</small>` : ""}</span>
+              ${jokerToday(s) ? `<button class="btn joker on" data-unjoker="${s.id}" title="Joker heute eingesetzt – klicken zum Zurücknehmen">🃏 heute</button>`
+                : s.jokers ? `<button class="btn joker" data-joker="${s.id}" title="Joker einsetzen: heute nicht im Rad (noch ${s.jokers})">🃏${s.jokers}</button>` : ""}
               <button class="btn" data-d="-1" data-id="${s.id}" ${counts[s.id] ? "" : "disabled"}>−</button>
               <span class="badge">${counts[s.id] || 0}</span>
               <button class="btn" data-d="1" data-id="${s.id}">+</button></li>`).join("")}</ul>`
@@ -227,6 +238,20 @@ function renderWheelTab() {
     if (d > 0) flashStudents([b.dataset.id]);
     setCurrent(c2);
   });
+  document.querySelectorAll(".pool [data-joker]").forEach(b => b.onclick = () => useJoker(c.students.find(s => s.id === b.dataset.joker)));
+  document.querySelectorAll(".pool [data-unjoker]").forEach(b => b.onclick = async () => {
+    const s = c.students.find(x => x.id === b.dataset.unjoker);
+    if (!confirm(`Joker von ${s.name} zurücknehmen? ${s.name} ist dann heute wieder im Rad.`)) return;
+    setCurrent(await api("DELETE", `/classes/${c.id}/students/${s.id}/joker`, { day: today(), subject: c.subject }));
+  });
+}
+
+async function useJoker(s, ask = true) {
+  const c = state.current;
+  if (ask && !confirm(`${s.name} setzt einen Joker ein und ist heute in keinem Fach im Rad.\nDanach noch ${s.jokers - 1} Joker.`)) return false;
+  setCurrent(await api("POST", `/classes/${c.id}/students/${s.id}/joker`, { day: today(), subject: c.subject }));
+  safe(() => Sound.pop()); toast(`🃏 ${s.name} ist heute nicht im Rad`);
+  return true;
 }
 
 async function addNames(names) {
@@ -394,7 +419,8 @@ function setControls() {
   const c = state.current; if (!c) return;
   const busy = state.spinning || state.pendingRating || dlg.open;
   const set = (sel, dis) => { const e = $(sel); if (e) e.disabled = dis; };
-  set("#spin", busy || !c.pool.length); set("#hub", busy || !c.pool.length);
+  const n = poolSegments().length;
+  set("#spin", busy || !n); set("#hub", busy || !n);
   set("#shuffleBtn", busy || c.pool.length < 2); set("#resetBtn", busy);
 }
 const safe = fn => { try { fn(); } catch (e) { console.warn(e); } };   // Ton-Fehler dürfen nie die Animation stoppen
@@ -425,7 +451,7 @@ function spin() {
     if (isXmas()) snow(5000, 90);
     if (isEaster()) bunnies(1);
     animateWinner(); setControls();
-    setTimeout(() => { state.pendingRating = false; openRating(segs[pos], pos); }, 650);
+    setTimeout(() => { state.pendingRating = false; openRating(segs[pos], segs[pos].pos); }, 650);
   };
   (function frame(now) {
     const t = (now - t0) / 1000;
@@ -501,8 +527,10 @@ function setScore(v) {
   range.value = v;
   const o = outcomeOf(v), col = { removed: "var(--good)", kept: "var(--mid)", added: "var(--bad)" }[o];
   $("#scoreBig").textContent = v + " %"; $("#scoreBig").style.color = col;
-  const box = $("#resultBox");
-  box.className = "result o-" + o; box.textContent = `${state.drawn ? state.drawn.name : ""} ${OUT_TEXT[o]}`;
+  const box = $("#resultBox"), s = state.drawn;
+  const last = s && o === "removed" && state.current.pool.filter(id => id === s.id).length === 1;
+  box.className = "result o-" + o;
+  box.textContent = `${s ? s.name : ""} ${OUT_TEXT[o]}${last ? " – 3 Wochen Pause, danach wieder 1× im Rad" : ""}`;
 }
 range.oninput = () => setScore(range.value);
 // Schnell-Notizen: Klick fügt den Text ins Notizfeld ein
@@ -517,8 +545,15 @@ function openRating(s, pos) {
   $("#winnerName").textContent = s.name;
   $("#winLabel").textContent = SEASON().winLabel;
   const av = $("#winAvatar"); av.textContent = initials(s.name); av.style.background = `linear-gradient(135deg, ${colorFor(s.id, 62)}, ${colorFor(s.id, 42)})`;
+  const live = state.current.students.find(x => x.id === s.id) || s, jb = $("#jokerBtn");
+  jb.hidden = !live.jokers; jb.textContent = `🃏 Joker (${live.jokers})`;
   setScore(60); if (!dlg.open) dlg.showModal(); $("#saveBtn").focus();
 }
+$("#jokerBtn").onclick = async () => {
+  const s = state.drawn; if (!s) return;
+  closeRating();
+  try { await useJoker(s, false); } catch (e) { renderMain(); }
+};
 function closeRating() { if (dlg.open) dlg.close(); state.drawn = null; state.winnerPos = null; drawWheel(); setControls(); }
 $("#skipBtn").onclick = closeRating;
 dlg.addEventListener("cancel", e => { e.preventDefault(); closeRating(); });
@@ -601,7 +636,14 @@ function renderStudentsTab() {
         <span class="muted">${c.students.length} Schüler/innen in der Klasse</span>
         <button class="btn primary" id="addBtn">Hinzufügen</button>
       </div>
+      <div class="row jokerbar">
+        <span class="label">🃏 Joker</span>
+        <span class="muted small" style="flex:1">${isAdmin() ? "Mit − / + bei den Namen einzeln setzen." : "Joker vergeben können Administrator/innen."} Ein Joker nimmt eine/n Schüler/in für den Tag aus dem Rad (alle Fächer).</span>
+        ${isAdmin() ? `<button class="btn" id="jokerAll">Allen +1 Joker</button>` : ""}
+      </div>
       <ul class="studs">${c.students.map(s => `<li><div class="avatar" style="background:${colorFor(s.id)}">${esc(initials(s.name))}</div><span>${esc(s.name)}</span>
+        ${isAdmin() ? `<span class="jk"><button class="btn ghost small" data-jk="-1" data-sid="${s.id}" ${s.jokers ? "" : "disabled"}>−</button><b title="Joker">🃏${s.jokers}</b><button class="btn ghost small" data-jk="1" data-sid="${s.id}">+</button></span>`
+          : s.jokers ? `<b class="jk" title="Joker">🃏${s.jokers}</b>` : ""}
         <button class="btn ghost icon" data-edit="${s.id}" title="Umbenennen">✏️</button><button class="btn ghost icon danger" data-del="${s.id}" title="Löschen">✕</button></li>`).join("")}</ul>
       <div style="margin-top:22px;border-top:1px solid var(--stroke);padding-top:16px">${c.isOwner
         ? `<button class="btn danger" id="delClass">Klasse löschen</button>`
@@ -625,6 +667,12 @@ function renderStudentsTab() {
     await api("DELETE", "/classes/" + c.id); state.current = null; await loadClasses(); renderMain();
   };
   if ($("#leaveClass")) $("#leaveClass").onclick = leaveClass;
+  if ($("#jokerAll")) $("#jokerAll").onclick = async () => {
+    if (!confirm(`Allen ${c.students.length} Schüler/innen der Klasse ${c.name} einen Joker geben?`)) return;
+    setCurrent(await api("POST", `/classes/${c.id}/jokers`, { subject: c.subject })); Sound.pop(); toast("🃏 Alle haben einen Joker mehr");
+  };
+  document.querySelectorAll("[data-jk]").forEach(b => b.onclick = async () =>
+    setCurrent(await api("PUT", `/classes/${c.id}/students/${b.dataset.sid}/joker`, { delta: +b.dataset.jk, subject: c.subject })));
 }
 
 /* ---------------- Verlauf ---------------- */
@@ -634,10 +682,13 @@ function renderHistoryTab() {
   const fmt = ts => new Date(ts * 1000).toLocaleString("de-AT", { dateStyle: "short", timeStyle: "short" });
   const avg = rates.length ? Math.round(rates.reduce((s, h) => s + h.score, 0) / rates.length) : "–";
   const cnt = o => rates.filter(h => h.outcome === o).length;
-  const shown = c.history.filter(h => !filter || (h.type === "rate" && h.studentId === filter));
+  const shown = c.history.filter(h => !filter || (h.type !== "reset" && h.studentId === filter));
   const team = c.members && c.members.length > 0;
   const rows = shown.map(h => h.type === "reset"
     ? `<tr><td>${fmt(h.ts)}</td><td colspan="4" class="muted">↺ Rad zurückgesetzt</td></tr>`
+    : h.type === "joker"
+    ? `<tr><td class="nowrap">${fmt(h.ts)}${team && h.by ? `<div class="muted small">${esc(h.by)}</div>` : ""}</td>
+        <td><a href="#" class="stud" data-stud="${h.studentId}">${esc(h.name)}</a></td><td colspan="3" class="muted">🃏 Joker eingesetzt – an dem Tag nicht im Rad</td></tr>`
     : `<tr><td class="nowrap">${fmt(h.ts)}${team && h.by ? `<div class="muted small">${esc(h.by)}</div>` : ""}</td>
         <td><a href="#" class="stud" data-stud="${h.studentId}">${esc(h.name)}</a></td><td class="nowrap">${h.score} %</td>
         <td><span class="pill o-${h.outcome}">${OUT_SHORT[h.outcome]}</span></td>
@@ -976,8 +1027,17 @@ async function renderUsers() {
         <td style="text-align:right;white-space:nowrap"><button class="btn" data-pw="${u.id}">Passwort setzen</button>
         ${u.id === state.user.id ? "" : `<button class="btn danger" data-deluser="${u.id}">Löschen</button>`}</td></tr>`).join("")}
       </table>
+      <div class="row jokerbar" style="margin-top:20px">
+        <span class="label">🃏 Joker</span>
+        <span class="muted small" style="flex:1">Gibt allen Schüler/innen in allen Klassen (aller Lehrkräfte) einen Joker. Einzeln setzen: Klasse öffnen → Schülerliste.</span>
+        <button class="btn" id="jokerGlobal">Allen +1 Joker</button>
+      </div>
       <div class="muted" style="margin-top:14px;font-size:13px">Jede Lehrkraft sieht ihre eigenen und die mit ihr geteilten Klassen. Beim Löschen eines Benutzers gehen geteilte Klassen an die Team-Lehrkraft über, nicht geteilte werden gelöscht.</div>
     </div>`;
+  $("#jokerGlobal").onclick = async () => {
+    if (!confirm("Allen Schüler/innen in allen Klassen einen Joker geben?")) return;
+    try { const r = await api("POST", "/jokers"); Sound.pop(); toast(`🃏 ${r.students} Schüler/innen haben einen Joker mehr`); } catch (err) {}
+  };
   $("#newUser").onsubmit = async e => {
     e.preventDefault();
     try { await api("POST", "/users", { username: $("#nuName").value.trim(), password: $("#nuPw").value, role: $("#nuRole").value }); toast("Benutzer angelegt"); renderUsers(); }

@@ -25,6 +25,7 @@ PORT = int(os.environ.get("PORT", "8080"))
 
 REMOVE_AT = 70   # >= 70 %  -> ein Eintrag wird aus dem Rad entfernt
 KEEP_AT = 50     # 50–69 %  -> bleibt; < 50 % -> zusätzlicher Eintrag an zufälliger Position
+PAUSE_DAYS = 21  # letzter Eintrag mit >= 70 % entfernt -> 3 Wochen Pause, danach wieder 1x im Rad
 
 LOCK = threading.Lock()
 RNG = random.SystemRandom()
@@ -97,6 +98,12 @@ CREATE TABLE IF NOT EXISTS user_sounds (
     data        BLOB NOT NULL,
     PRIMARY KEY (user_id, kind)
 );
+CREATE TABLE IF NOT EXISTS subject_pause (
+    subject_id  TEXT NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
+    student_id  TEXT NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+    until       INTEGER NOT NULL,
+    PRIMARY KEY (subject_id, student_id)
+);
 CREATE INDEX IF NOT EXISTS idx_students_class ON students(class_id);
 CREATE INDEX IF NOT EXISTS idx_history_class ON history(class_id, id);
 """
@@ -155,6 +162,11 @@ def init_db():
             ucols = [r[1] for r in con.execute("PRAGMA table_info(users)")]
             if "settings" not in ucols:
                 con.execute("ALTER TABLE users ADD COLUMN settings TEXT")
+            scols = [r[1] for r in con.execute("PRAGMA table_info(students)")]
+            if "jokers" not in scols:
+                con.execute("ALTER TABLE students ADD COLUMN jokers INTEGER NOT NULL DEFAULT 0")
+            if "joker_day" not in scols:
+                con.execute("ALTER TABLE students ADD COLUMN joker_day TEXT")   # JJJJ-MM-TT: Joker gilt an diesem Tag
             hcols = [r[1] for r in con.execute("PRAGMA table_info(history)")]
             if "subject_id" not in hcols:
                 con.execute("ALTER TABLE history ADD COLUMN subject_id TEXT")
@@ -182,7 +194,7 @@ def migrate_v1(con):
     for c in data.get("classes", []):
         con.execute("INSERT INTO classes (id, name, created_at) VALUES (?,?,?)", (c["id"], c["name"], int(time.time())))
         for i, s in enumerate(c.get("students", [])):
-            con.execute("INSERT INTO students VALUES (?,?,?,?)", (s["id"], c["id"], s["name"], i))
+            con.execute("INSERT INTO students (id, class_id, name, sort) VALUES (?,?,?,?)", (s["id"], c["id"], s["name"], i))
         con.executemany("INSERT INTO pool_entries VALUES (?,?,?)",
                         [(c["id"], i, sid) for i, sid in enumerate(c.get("pool", []))])
         for h in reversed(c.get("history", [])):
@@ -254,12 +266,33 @@ def insert_random(pool, sid):
     pool.insert(RNG.choice(spots), sid)
 
 
+def end_pauses(con, cid):
+    """Abgelaufene Pausen: Schüler/in kommt wieder genau einmal ins Rad des Fachs."""
+    due = con.execute("""SELECT p.subject_id, p.student_id FROM subject_pause p JOIN subjects s ON s.id=p.subject_id
+                         WHERE s.class_id=? AND p.until<=?""", (cid, int(time.time()))).fetchall()
+    for subj, sid in due:
+        pool = read_pool(con, subj)
+        if sid not in pool:
+            insert_random(pool, sid)
+            write_pool(con, subj, pool)
+        con.execute("DELETE FROM subject_pause WHERE subject_id=? AND student_id=?", (subj, sid))
+
+
+def valid_day(d):
+    d = str(d or "")
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", d):
+        raise ApiError(400, "Ungültiges Datum")
+    return d
+
+
 def class_obj(con, cid, subj=None):
     c = con.execute("SELECT * FROM classes WHERE id=?", (cid,)).fetchone()
     if not c:
         raise ApiError(404, "Klasse nicht gefunden")
-    students = [{"id": r["id"], "name": r["name"]} for r in con.execute(
-        "SELECT id, name FROM students WHERE class_id=? ORDER BY sort, name", (cid,))]
+    end_pauses(con, cid)
+    students = [{"id": r["id"], "name": r["name"], "jokers": r["jokers"], "jokerDay": r["joker_day"] or ""}
+                for r in con.execute(
+        "SELECT id, name, jokers, joker_day FROM students WHERE class_id=? ORDER BY sort, name", (cid,))]
     subjects = [{"id": r["id"], "name": r["name"], "pool": r["pool"]} for r in con.execute("""
         SELECT s.id, s.name, (SELECT COUNT(*) FROM subject_pool p WHERE p.subject_id=s.id) AS pool
         FROM subjects s WHERE s.class_id=? ORDER BY s.sort, s.name""", (cid,))]
@@ -271,8 +304,9 @@ def class_obj(con, cid, subj=None):
     history = [{"id": r["id"], "ts": r["ts"], "type": r["type"], "studentId": r["student_id"], "name": r["name"],
                 "score": r["score"], "outcome": r["outcome"], "note": r["note"] or "", "by": r["rated_by"] or ""}
                for r in con.execute("SELECT * FROM history WHERE subject_id=? ORDER BY id DESC LIMIT 1000", (subj,))]
+    pauses = {r[0]: r[1] for r in con.execute("SELECT student_id, until FROM subject_pause WHERE subject_id=?", (subj,))}
     return {"id": c["id"], "name": c["name"], "students": students, "subjects": subjects,
-            "subject": subj, "pool": read_pool(con, subj), "history": history}
+            "subject": subj, "pool": read_pool(con, subj), "pauses": pauses, "history": history}
 
 
 def get_student(con, cid, sid):
@@ -548,6 +582,13 @@ def route(con, method, parts, body, user):
         return [{"id": r["id"], "username": r["username"]} for r in con.execute(
             "SELECT id, username FROM users WHERE id<>? ORDER BY username COLLATE NOCASE", (uid,))]
 
+    if parts == ["jokers"] and method == "POST":
+        # Admin: allen Schüler/innen in allen Klassen Joker geben
+        if user["role"] != "admin":
+            raise ApiError(403, "Nur für Administrator/innen")
+        n = con.execute("UPDATE students SET jokers=jokers+1").rowcount
+        return {"ok": True, "students": n}
+
     if parts == ["classes"]:
         if method == "GET":
             return [dict(r) for r in con.execute("""
@@ -680,7 +721,7 @@ def route(con, method, parts, body, user):
             n = clean_name(n)
             if n and n.lower() not in existing:
                 sid = new_id()
-                con.execute("INSERT INTO students VALUES (?,?,?,?)", (sid, cid, n, sort))
+                con.execute("INSERT INTO students (id, class_id, name, sort) VALUES (?,?,?,?)", (sid, cid, n, sort))
                 sort += 1
                 existing.add(n.lower())
                 for pool in pools.values():
@@ -688,6 +729,42 @@ def route(con, method, parts, body, user):
         for f, pool in pools.items():
             write_pool(con, f, pool)
         return class_obj(con, cid, subj)
+
+    # ---- Joker (gelten für alle Fächer der Klasse)
+    if rest == ["jokers"] and method == "POST":
+        if user["role"] != "admin":
+            raise ApiError(403, "Joker vergeben dürfen nur Administrator/innen")
+        con.execute("UPDATE students SET jokers=jokers+1 WHERE class_id=?", (cid,))
+        return class_obj(con, cid, subj)
+
+    if len(rest) == 3 and rest[0] == "students" and rest[2] == "joker":
+        s = get_student(con, cid, rest[1])
+        r = con.execute("SELECT jokers, joker_day FROM students WHERE id=?", (s["id"],)).fetchone()
+        if method == "PUT":
+            if user["role"] != "admin":
+                raise ApiError(403, "Joker vergeben dürfen nur Administrator/innen")
+            con.execute("UPDATE students SET jokers=MAX(0, jokers+?) WHERE id=?", (int(body.get("delta", 0)), s["id"]))
+            return class_obj(con, cid, subj)
+        if method == "POST":
+            # Joker einsetzen: an diesem Tag nicht im Rad (alle Fächer), Einträge bleiben erhalten
+            day = valid_day(body.get("day"))
+            if r["joker_day"] == day:
+                raise ApiError(400, f"{s['name']} hat heute schon einen Joker eingesetzt")
+            if r["jokers"] < 1:
+                raise ApiError(400, f"{s['name']} hat keinen Joker mehr")
+            con.execute("UPDATE students SET jokers=jokers-1, joker_day=? WHERE id=?", (day, s["id"]))
+            if subj:
+                con.execute("INSERT INTO history (class_id, subject_id, ts, type, student_id, name, rated_by)"
+                            " VALUES (?,?,?,'joker',?,?,?)", (cid, subj, int(time.time()), s["id"], s["name"], user["username"]))
+            return class_obj(con, cid, subj)
+        if method == "DELETE":
+            # versehentlich eingesetzt -> zurücknehmen
+            day = valid_day(body.get("day"))
+            if r["joker_day"] == day:
+                con.execute("UPDATE students SET jokers=jokers+1, joker_day=NULL WHERE id=?", (s["id"],))
+                con.execute("""DELETE FROM history WHERE id=(SELECT MAX(id) FROM history
+                               WHERE class_id=? AND student_id=? AND type='joker')""", (cid, s["id"]))
+            return class_obj(con, cid, subj)
 
     if len(rest) == 2 and rest[0] == "students":
         s = get_student(con, cid, rest[1])
@@ -710,6 +787,7 @@ def route(con, method, parts, body, user):
         delta = int(body.get("delta", 0))
         if delta > 0:
             insert_random(pool, s["id"])
+            con.execute("DELETE FROM subject_pause WHERE subject_id=? AND student_id=?", (subj, s["id"]))
         elif delta < 0 and s["id"] in pool:
             idxs = [i for i, p in enumerate(pool) if p == s["id"]]
             pool.pop(RNG.choice(idxs))
@@ -732,6 +810,7 @@ def route(con, method, parts, body, user):
         pool = [r[0] for r in con.execute("SELECT id FROM students WHERE class_id=?", (cid,))]
         RNG.shuffle(pool)
         write_pool(con, need_subject(), pool)
+        con.execute("DELETE FROM subject_pause WHERE subject_id=?", (subj,))
         con.execute("INSERT INTO history (class_id, subject_id, ts, type) VALUES (?,?,?,'reset')",
                     (cid, subj, int(time.time())))
         return class_obj(con, cid, subj)
@@ -767,6 +846,9 @@ def route(con, method, parts, body, user):
                 pool.pop(pos)    # genau den gezogenen Eintrag entfernen
             else:
                 pool.remove(s["id"])
+            if s["id"] not in pool:     # letzter Eintrag -> Pause, danach kommt er/sie wieder 1x ins Rad
+                con.execute("INSERT OR REPLACE INTO subject_pause VALUES (?,?,?)",
+                            (subj, s["id"], int(time.time()) + PAUSE_DAYS * 86400))
         elif outcome == "added":
             insert_random(pool, s["id"])
         write_pool(con, subj, pool)

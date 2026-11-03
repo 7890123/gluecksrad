@@ -111,6 +111,12 @@ main{min-width:0;display:flex;flex-direction:column;gap:18px}
 .pool li.out .dot{opacity:.3}
 .badge{min-width:28px;text-align:center;border-radius:999px;background:color-mix(in srgb,var(--accent) 22%,transparent);color:var(--ink);font-weight:700;font-size:13px;padding:1px 7px}
 .pool .btn{padding:0 8px;border-radius:8px;height:26px}
+.pool .n small.state{margin-left:6px;font-size:11px;color:var(--muted);text-decoration:none;display:inline-block}
+.pool .btn.joker{font-size:12px;padding:0 6px}
+.pool .btn.joker.on{background:color-mix(in srgb,var(--mid) 22%,transparent)}
+.jokerbar{flex-wrap:wrap;margin-top:18px;padding-top:14px;border-top:1px solid var(--stroke)}
+.studs .jk{display:flex;align-items:center;gap:2px;flex:none;font-size:13px}
+.studs li span.jk{flex:none}
 .last{display:flex;align-items:center;gap:12px}
 .avatar{width:44px;height:44px;border-radius:14px;display:grid;place-items:center;font-weight:700;color:#fff;flex:none}
 .pill{display:inline-block;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:700}
@@ -120,7 +126,7 @@ main{min-width:0;display:flex;flex-direction:column;gap:18px}
 
 /* ---------- Schüler & Verlauf ---------- */
 .card{padding:22px}
-.studs{list-style:none;padding:0;margin:16px 0 0;display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:8px}
+.studs{list-style:none;padding:0;margin:16px 0 0;display:grid;grid-template-columns:repeat(auto-fill,minmax(min(270px,100%),1fr));gap:8px}
 .studs li{display:flex;gap:10px;align-items:center;border:1px solid var(--stroke);border-radius:14px;padding:8px 10px;background:var(--glass-2)}
 .studs li .avatar{width:34px;height:34px;border-radius:10px;font-size:13px}
 .studs li span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
