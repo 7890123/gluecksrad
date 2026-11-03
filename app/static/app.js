@@ -57,7 +57,6 @@ const rand = (a, b) => a + Math.random() * (b - a);
 const initials = n => n.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join("");
 const today = () => new Date().toLocaleDateString("sv");             // JJJJ-MM-TT in Ortszeit
 const jokerToday = s => s.jokerDay === today();                       // Joker eingesetzt -> heute nicht im Rad
-const isAdmin = () => state.user && state.user.role === "admin";
 const fmtDay = ts => new Date(ts * 1000).toLocaleDateString("de-AT", { day: "2-digit", month: "2-digit" });
 
 function studentIndex(id) { return state.current ? state.current.students.findIndex(s => s.id === id) : 0; }
@@ -242,15 +241,15 @@ function renderWheelTab() {
   document.querySelectorAll(".pool [data-unjoker]").forEach(b => b.onclick = async () => {
     const s = c.students.find(x => x.id === b.dataset.unjoker);
     if (!confirm(`Joker von ${s.name} zurücknehmen? ${s.name} ist dann heute wieder im Rad.`)) return;
-    setCurrent(await api("DELETE", `/classes/${c.id}/students/${s.id}/joker`, { day: today(), subject: c.subject }));
+    setCurrent(await api("DELETE", subjUrl(`/students/${s.id}/joker`), { day: today() }));
   });
 }
 
 async function useJoker(s, ask = true) {
   const c = state.current;
-  if (ask && !confirm(`${s.name} setzt einen Joker ein und ist heute in keinem Fach im Rad.\nDanach noch ${s.jokers - 1} Joker.`)) return false;
-  setCurrent(await api("POST", `/classes/${c.id}/students/${s.id}/joker`, { day: today(), subject: c.subject }));
-  safe(() => Sound.pop()); toast(`🃏 ${s.name} ist heute nicht im Rad`);
+  if (ask && !confirm(`${s.name} setzt einen Joker ein und ist heute in ${currentSubject().name} nicht im Rad.\nDanach noch ${s.jokers - 1} Joker in diesem Fach.`)) return false;
+  setCurrent(await api("POST", subjUrl(`/students/${s.id}/joker`), { day: today() }));
+  safe(() => Sound.pop()); toast(`🃏 ${s.name} ist heute in ${currentSubject().name} nicht im Rad`);
   return true;
 }
 
@@ -637,13 +636,12 @@ function renderStudentsTab() {
         <button class="btn primary" id="addBtn">Hinzufügen</button>
       </div>
       <div class="row jokerbar">
-        <span class="label">🃏 Joker</span>
-        <span class="muted small" style="flex:1">${isAdmin() ? "Mit − / + bei den Namen einzeln setzen." : "Joker vergeben können Administrator/innen."} Ein Joker nimmt eine/n Schüler/in für den Tag aus dem Rad (alle Fächer).</span>
-        ${isAdmin() ? `<button class="btn" id="jokerAll">Allen +1 Joker</button>` : ""}
+        <span class="label">🃏 Joker · ${esc(currentSubject().name)}</span>
+        <span class="muted small" style="flex:1">Joker gelten pro Fach (oben wählen). Mit − / + bei den Namen einzeln setzen. Ein Joker nimmt eine/n Schüler/in für den Tag aus dem Rad dieses Fachs.</span>
+        <button class="btn" id="jokerAll">Allen +1 Joker</button>
       </div>
       <ul class="studs">${c.students.map(s => `<li><div class="avatar" style="background:${colorFor(s.id)}">${esc(initials(s.name))}</div><span>${esc(s.name)}</span>
-        ${isAdmin() ? `<span class="jk"><button class="btn ghost small" data-jk="-1" data-sid="${s.id}" ${s.jokers ? "" : "disabled"}>−</button><b title="Joker">🃏${s.jokers}</b><button class="btn ghost small" data-jk="1" data-sid="${s.id}">+</button></span>`
-          : s.jokers ? `<b class="jk" title="Joker">🃏${s.jokers}</b>` : ""}
+        <span class="jk"><button class="btn ghost small" data-jk="-1" data-sid="${s.id}" ${s.jokers ? "" : "disabled"}>−</button><b title="Joker in ${esc(currentSubject().name)}">🃏${s.jokers}</b><button class="btn ghost small" data-jk="1" data-sid="${s.id}">+</button></span>
         <button class="btn ghost icon" data-edit="${s.id}" title="Umbenennen">✏️</button><button class="btn ghost icon danger" data-del="${s.id}" title="Löschen">✕</button></li>`).join("")}</ul>
       <div style="margin-top:22px;border-top:1px solid var(--stroke);padding-top:16px">${c.isOwner
         ? `<button class="btn danger" id="delClass">Klasse löschen</button>`
@@ -667,12 +665,12 @@ function renderStudentsTab() {
     await api("DELETE", "/classes/" + c.id); state.current = null; await loadClasses(); renderMain();
   };
   if ($("#leaveClass")) $("#leaveClass").onclick = leaveClass;
-  if ($("#jokerAll")) $("#jokerAll").onclick = async () => {
-    if (!confirm(`Allen ${c.students.length} Schüler/innen der Klasse ${c.name} einen Joker geben?`)) return;
-    setCurrent(await api("POST", `/classes/${c.id}/jokers`, { subject: c.subject })); Sound.pop(); toast("🃏 Alle haben einen Joker mehr");
+  $("#jokerAll").onclick = async () => {
+    if (!confirm(`Allen ${c.students.length} Schüler/innen der Klasse ${c.name} einen Joker in ${currentSubject().name} geben?`)) return;
+    setCurrent(await api("POST", subjUrl("/jokers"))); Sound.pop(); toast(`🃏 Alle haben einen Joker mehr in ${currentSubject().name}`);
   };
   document.querySelectorAll("[data-jk]").forEach(b => b.onclick = async () =>
-    setCurrent(await api("PUT", `/classes/${c.id}/students/${b.dataset.sid}/joker`, { delta: +b.dataset.jk, subject: c.subject })));
+    setCurrent(await api("PUT", subjUrl(`/students/${b.dataset.sid}/joker`), { delta: +b.dataset.jk })));
 }
 
 /* ---------------- Verlauf ---------------- */
@@ -688,7 +686,7 @@ function renderHistoryTab() {
     ? `<tr><td>${fmt(h.ts)}</td><td colspan="4" class="muted">↺ Rad zurückgesetzt</td></tr>`
     : h.type === "joker"
     ? `<tr><td class="nowrap">${fmt(h.ts)}${team && h.by ? `<div class="muted small">${esc(h.by)}</div>` : ""}</td>
-        <td><a href="#" class="stud" data-stud="${h.studentId}">${esc(h.name)}</a></td><td colspan="3" class="muted">🃏 Joker eingesetzt – an dem Tag nicht im Rad</td></tr>`
+        <td><a href="#" class="stud" data-stud="${h.studentId}">${esc(h.name)}</a></td><td colspan="3" class="muted">🃏 Joker eingesetzt – an dem Tag nicht im Rad dieses Fachs</td></tr>`
     : `<tr><td class="nowrap">${fmt(h.ts)}${team && h.by ? `<div class="muted small">${esc(h.by)}</div>` : ""}</td>
         <td><a href="#" class="stud" data-stud="${h.studentId}">${esc(h.name)}</a></td><td class="nowrap">${h.score} %</td>
         <td><span class="pill o-${h.outcome}">${OUT_SHORT[h.outcome]}</span></td>
@@ -1029,13 +1027,13 @@ async function renderUsers() {
       </table>
       <div class="row jokerbar" style="margin-top:20px">
         <span class="label">🃏 Joker</span>
-        <span class="muted small" style="flex:1">Gibt allen Schüler/innen in allen Klassen (aller Lehrkräfte) einen Joker. Einzeln setzen: Klasse öffnen → Schülerliste.</span>
+        <span class="muted small" style="flex:1">Gibt allen Schüler/innen in allen Klassen (aller Lehrkräfte) einen Joker – in jedem Fach. Einzeln oder pro Fach: Klasse öffnen → Schülerliste.</span>
         <button class="btn" id="jokerGlobal">Allen +1 Joker</button>
       </div>
       <div class="muted" style="margin-top:14px;font-size:13px">Jede Lehrkraft sieht ihre eigenen und die mit ihr geteilten Klassen. Beim Löschen eines Benutzers gehen geteilte Klassen an die Team-Lehrkraft über, nicht geteilte werden gelöscht.</div>
     </div>`;
   $("#jokerGlobal").onclick = async () => {
-    if (!confirm("Allen Schüler/innen in allen Klassen einen Joker geben?")) return;
+    if (!confirm("Allen Schüler/innen in allen Klassen einen Joker geben – in jedem Fach?")) return;
     try { const r = await api("POST", "/jokers"); Sound.pop(); toast(`🃏 ${r.students} Schüler/innen haben einen Joker mehr`); } catch (err) {}
   };
   $("#newUser").onsubmit = async e => {

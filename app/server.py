@@ -104,6 +104,13 @@ CREATE TABLE IF NOT EXISTS subject_pause (
     until       INTEGER NOT NULL,
     PRIMARY KEY (subject_id, student_id)
 );
+CREATE TABLE IF NOT EXISTS subject_jokers (
+    subject_id  TEXT NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
+    student_id  TEXT NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+    jokers      INTEGER NOT NULL DEFAULT 0,
+    joker_day   TEXT,                       -- JJJJ-MM-TT: Joker in diesem Fach an diesem Tag eingesetzt
+    PRIMARY KEY (subject_id, student_id)
+);
 CREATE INDEX IF NOT EXISTS idx_students_class ON students(class_id);
 CREATE INDEX IF NOT EXISTS idx_history_class ON history(class_id, id);
 """
@@ -176,6 +183,7 @@ def init_db():
                 con.execute("ALTER TABLE history ADD COLUMN rated_by TEXT")
             migrate_v1(con)
             migrate_subjects(con)
+            migrate_jokers(con)
             con.execute("DELETE FROM sessions WHERE expires_at < ?", (int(time.time()),))
             # optional: Admin per Umgebungsvariablen anlegen
             au, ap = os.environ.get("ADMIN_USER"), os.environ.get("ADMIN_PASSWORD")
@@ -216,6 +224,24 @@ def migrate_subjects(con):
         write_pool(con, subj, old)
         con.execute("UPDATE history SET subject_id=? WHERE class_id=? AND subject_id IS NULL", (subj, cid))
         con.execute("DELETE FROM pool_entries WHERE class_id=?", (cid,))
+
+
+def migrate_jokers(con):
+    """Joker galten zuerst pro Klasse (students.jokers) – jetzt pro Fach: Bestand in jedes Fach der Klasse übernehmen."""
+    rows = con.execute("""SELECT s.id, s.class_id, s.jokers, s.joker_day FROM students s
+                          WHERE s.jokers > 0 OR s.joker_day IS NOT NULL""").fetchall()
+    for sid, cid, n, day in rows:
+        for (subj,) in con.execute("SELECT id FROM subjects WHERE class_id=?", (cid,)).fetchall():
+            con.execute("""INSERT INTO subject_jokers VALUES (?,?,?,?) ON CONFLICT(subject_id, student_id)
+                           DO UPDATE SET jokers=jokers+excluded.jokers""", (subj, sid, n, day))
+    con.execute("UPDATE students SET jokers=0, joker_day=NULL WHERE jokers > 0 OR joker_day IS NOT NULL")
+
+
+def add_jokers(con, where="", args=()):
+    """+1 Joker für alle Schüler/innen in allen Fächern ihrer Klasse (optional eingeschränkt)."""
+    return con.execute(f"""INSERT INTO subject_jokers (subject_id, student_id, jokers)
+                           SELECT f.id, s.id, 1 FROM students s JOIN subjects f ON f.class_id=s.class_id WHERE 1=1 {where}
+                           ON CONFLICT(subject_id, student_id) DO UPDATE SET jokers=jokers+1""", args).rowcount
 
 
 # ---------------------------------------------------------------- Helpers ---
@@ -290,9 +316,6 @@ def class_obj(con, cid, subj=None):
     if not c:
         raise ApiError(404, "Klasse nicht gefunden")
     end_pauses(con, cid)
-    students = [{"id": r["id"], "name": r["name"], "jokers": r["jokers"], "jokerDay": r["joker_day"] or ""}
-                for r in con.execute(
-        "SELECT id, name, jokers, joker_day FROM students WHERE class_id=? ORDER BY sort, name", (cid,))]
     subjects = [{"id": r["id"], "name": r["name"], "pool": r["pool"]} for r in con.execute("""
         SELECT s.id, s.name, (SELECT COUNT(*) FROM subject_pool p WHERE p.subject_id=s.id) AS pool
         FROM subjects s WHERE s.class_id=? ORDER BY s.sort, s.name""", (cid,))]
@@ -301,6 +324,11 @@ def class_obj(con, cid, subj=None):
         return class_obj(con, cid)
     if subj not in {x["id"] for x in subjects}:
         subj = subjects[0]["id"]
+    students = [{"id": r["id"], "name": r["name"], "jokers": r["jokers"] or 0, "jokerDay": r["joker_day"] or ""}
+                for r in con.execute("""
+        SELECT s.id, s.name, j.jokers, j.joker_day FROM students s
+        LEFT JOIN subject_jokers j ON j.student_id=s.id AND j.subject_id=?
+        WHERE s.class_id=? ORDER BY s.sort, s.name""", (subj, cid))]
     history = [{"id": r["id"], "ts": r["ts"], "type": r["type"], "studentId": r["student_id"], "name": r["name"],
                 "score": r["score"], "outcome": r["outcome"], "note": r["note"] or "", "by": r["rated_by"] or ""}
                for r in con.execute("SELECT * FROM history WHERE subject_id=? ORDER BY id DESC LIMIT 1000", (subj,))]
@@ -583,11 +611,11 @@ def route(con, method, parts, body, user):
             "SELECT id, username FROM users WHERE id<>? ORDER BY username COLLATE NOCASE", (uid,))]
 
     if parts == ["jokers"] and method == "POST":
-        # Admin: allen Schüler/innen in allen Klassen Joker geben
+        # Admin: allen Schüler/innen in allen Klassen und Fächern einen Joker geben
         if user["role"] != "admin":
             raise ApiError(403, "Nur für Administrator/innen")
-        n = con.execute("UPDATE students SET jokers=jokers+1").rowcount
-        return {"ok": True, "students": n}
+        add_jokers(con)
+        return {"ok": True, "students": con.execute("SELECT COUNT(*) FROM students").fetchone()[0]}
 
     if parts == ["classes"]:
         if method == "GET":
@@ -730,40 +758,40 @@ def route(con, method, parts, body, user):
             write_pool(con, f, pool)
         return class_obj(con, cid, subj)
 
-    # ---- Joker (gelten für alle Fächer der Klasse)
-    if rest == ["jokers"] and method == "POST":
-        if user["role"] != "admin":
-            raise ApiError(403, "Joker vergeben dürfen nur Administrator/innen")
-        con.execute("UPDATE students SET jokers=jokers+1 WHERE class_id=?", (cid,))
+    # ---- Joker (pro Fach; vergeben darf jede Lehrkraft der Klasse)
+    if rest == ["subject", "jokers"] and method == "POST":
+        add_jokers(con, "AND f.id=?", (subj,))
         return class_obj(con, cid, subj)
 
-    if len(rest) == 3 and rest[0] == "students" and rest[2] == "joker":
-        s = get_student(con, cid, rest[1])
-        r = con.execute("SELECT jokers, joker_day FROM students WHERE id=?", (s["id"],)).fetchone()
+    if len(rest) == 4 and rest[0] == "subject" and rest[1] == "students" and rest[3] == "joker":
+        s = get_student(con, cid, rest[2])
+        con.execute("INSERT OR IGNORE INTO subject_jokers (subject_id, student_id) VALUES (?,?)", (subj, s["id"]))
+        r = con.execute("SELECT jokers, joker_day FROM subject_jokers WHERE subject_id=? AND student_id=?",
+                        (subj, s["id"])).fetchone()
+        key = (subj, s["id"])
         if method == "PUT":
-            if user["role"] != "admin":
-                raise ApiError(403, "Joker vergeben dürfen nur Administrator/innen")
-            con.execute("UPDATE students SET jokers=MAX(0, jokers+?) WHERE id=?", (int(body.get("delta", 0)), s["id"]))
+            con.execute("UPDATE subject_jokers SET jokers=MAX(0, jokers+?) WHERE subject_id=? AND student_id=?",
+                        (int(body.get("delta", 0)),) + key)
             return class_obj(con, cid, subj)
         if method == "POST":
-            # Joker einsetzen: an diesem Tag nicht im Rad (alle Fächer), Einträge bleiben erhalten
+            # Joker einsetzen: an diesem Tag nicht im Rad dieses Fachs, Einträge bleiben erhalten
             day = valid_day(body.get("day"))
             if r["joker_day"] == day:
                 raise ApiError(400, f"{s['name']} hat heute schon einen Joker eingesetzt")
             if r["jokers"] < 1:
-                raise ApiError(400, f"{s['name']} hat keinen Joker mehr")
-            con.execute("UPDATE students SET jokers=jokers-1, joker_day=? WHERE id=?", (day, s["id"]))
-            if subj:
-                con.execute("INSERT INTO history (class_id, subject_id, ts, type, student_id, name, rated_by)"
-                            " VALUES (?,?,?,'joker',?,?,?)", (cid, subj, int(time.time()), s["id"], s["name"], user["username"]))
+                raise ApiError(400, f"{s['name']} hat in diesem Fach keinen Joker mehr")
+            con.execute("UPDATE subject_jokers SET jokers=jokers-1, joker_day=? WHERE subject_id=? AND student_id=?",
+                        (day,) + key)
+            con.execute("INSERT INTO history (class_id, subject_id, ts, type, student_id, name, rated_by)"
+                        " VALUES (?,?,?,'joker',?,?,?)", (cid, subj, int(time.time()), s["id"], s["name"], user["username"]))
             return class_obj(con, cid, subj)
         if method == "DELETE":
             # versehentlich eingesetzt -> zurücknehmen
             day = valid_day(body.get("day"))
             if r["joker_day"] == day:
-                con.execute("UPDATE students SET jokers=jokers+1, joker_day=NULL WHERE id=?", (s["id"],))
+                con.execute("UPDATE subject_jokers SET jokers=jokers+1, joker_day=NULL WHERE subject_id=? AND student_id=?", key)
                 con.execute("""DELETE FROM history WHERE id=(SELECT MAX(id) FROM history
-                               WHERE class_id=? AND student_id=? AND type='joker')""", (cid, s["id"]))
+                               WHERE subject_id=? AND student_id=? AND type='joker')""", key)
             return class_obj(con, cid, subj)
 
     if len(rest) == 2 and rest[0] == "students":

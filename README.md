@@ -58,10 +58,11 @@ Update: `podman build --format docker -t gluecksrad .` und `systemctl --user res
     „+“ oder „Zurücksetzen“ beenden die Pause sofort.
   - **50–69 %** → bleibt
   - **< 50 %** → zusätzlicher Eintrag an zufälliger Position
-- **Joker 🃏**: Administrator/innen vergeben Joker – allen in einer Klasse („Allen +1 Joker“ bzw. − / + je Name in der
-  Schülerliste) oder allen Schüler/innen aller Klassen (👥 Benutzerverwaltung). Eingesetzt wird ein Joker über 🃏 in der
-  Namensliste oder direkt im Bewertungsdialog nach der Ziehung: die/der Schüler/in ist für den restlichen Tag in keinem Fach
-  der Klasse im Rad, die Einträge bleiben erhalten. Versehentlich eingesetzt → nochmal klicken zum Zurücknehmen.
+- **Joker 🃏** (pro Fach): Jede Lehrkraft der Klasse vergibt Joker im Tab Schülerliste – „Allen +1 Joker“ für das
+  gewählte Fach oder − / + je Name. Administrator/innen können zusätzlich allen Schüler/innen aller Klassen in jedem Fach
+  einen Joker geben (👥 Benutzerverwaltung). Eingesetzt wird ein Joker über 🃏 in der Namensliste oder direkt im
+  Bewertungsdialog nach der Ziehung: die/der Schüler/in ist für den restlichen Tag nicht im Rad dieses Fachs, die Einträge
+  bleiben erhalten. Versehentlich eingesetzt → nochmal klicken zum Zurücknehmen.
 - Verlauf mit Statistik, Hell-/Dunkel-Modus, Tastatur: Leertaste = drehen, Enter = speichern, Pfeiltasten = Bewertung
 
 ## Fehler „attempt to write a readonly database“
