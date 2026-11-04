@@ -640,9 +640,9 @@ function renderStudentsTab() {
         <span class="muted small" style="flex:1">Joker gelten pro Fach (oben wählen). Mit − / + bei den Namen einzeln setzen. Ein Joker nimmt eine/n Schüler/in für den Tag aus dem Rad dieses Fachs.</span>
         <button class="btn" id="jokerAll">Allen +1 Joker</button>
       </div>
-      <ul class="studs">${c.students.map(s => `<li><div class="avatar" style="background:${colorFor(s.id)}">${esc(initials(s.name))}</div><span>${esc(s.name)}</span>
-        <span class="jk"><button class="btn ghost small" data-jk="-1" data-sid="${s.id}" ${s.jokers ? "" : "disabled"}>−</button><b title="Joker in ${esc(currentSubject().name)}">🃏${s.jokers}</b><button class="btn ghost small" data-jk="1" data-sid="${s.id}">+</button></span>
-        <button class="btn ghost icon" data-edit="${s.id}" title="Umbenennen">✏️</button><button class="btn ghost icon danger" data-del="${s.id}" title="Löschen">✕</button></li>`).join("")}</ul>
+      <ul class="studs">${c.students.map(s => `<li><div class="avatar" style="background:${colorFor(s.id)}">${esc(initials(s.name))}</div><span class="nm" title="${esc(s.name)}">${esc(s.name)}</span>
+        <div class="ctl"><span class="jk" title="Joker in ${esc(currentSubject().name)}"><button class="btn ghost small" data-jk="-1" data-sid="${s.id}" ${s.jokers ? "" : "disabled"}>−</button><b>🃏 ${s.jokers}</b><button class="btn ghost small" data-jk="1" data-sid="${s.id}">+</button></span>
+        <button class="btn ghost icon" data-edit="${s.id}" title="Umbenennen">✏️</button><button class="btn ghost icon danger" data-del="${s.id}" title="Löschen">✕</button></div></li>`).join("")}</ul>
       <div style="margin-top:22px;border-top:1px solid var(--stroke);padding-top:16px">${c.isOwner
         ? `<button class="btn danger" id="delClass">Klasse löschen</button>`
         : `<button class="btn danger" id="leaveClass">Klasse verlassen</button> <span class="muted small">Die Klasse gehört ${esc(c.owner ? c.owner.username : "")}.</span>`}</div>
