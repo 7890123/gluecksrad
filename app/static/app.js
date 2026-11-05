@@ -233,7 +233,9 @@ function renderWheelTab() {
   $("#spin").onclick = $("#hub").onclick = spin;
   $("#shuffleBtn").onclick = shuffle;
   $("#resetBtn").onclick = async () => {
-    if (!confirm("Rad zurücksetzen? Jede/r Schüler/in ist danach genau einmal im Rad (zufällige Reihenfolge).")) return;
+    const paused = Object.keys(state.current.pauses).length;
+    if (!confirm("Rad zurücksetzen? Jede/r Schüler/in ist danach genau einmal im Rad (zufällige Reihenfolge)."
+      + (paused ? `\n\nAchtung: ${paused === 1 ? "1 laufende 3-Wochen-Pause endet" : `${paused} laufende 3-Wochen-Pausen enden`} dabei sofort.` : ""))) return;
     Sound.shuffle(); setCurrent(await api("POST", subjUrl("/reset")));
   };
   $("#quickAdd").onsubmit = async e => {
