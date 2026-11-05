@@ -26,7 +26,11 @@ PORT = int(os.environ.get("PORT", "8080"))
 REMOVE_AT = 70   # >= 70 %  -> ein Eintrag wird aus dem Rad entfernt
 KEEP_AT = 50     # 50–69 %  -> bleibt; < 50 % -> zusätzlicher Eintrag an zufälliger Position
 DAY_OUT_REASONS = ("drawn", "absent", "other")   # heute dran gewesen · abwesend · außerhalb des Rads dran
-PAUSE_DAYS = 21  # letzter Eintrag mit >= 70 % entfernt -> 3 Wochen Pause, danach wieder 1x im Rad
+PAUSE_DAYS = 21
+TURBO_REMOVE_AT = 90   # Turbo: >= 90 % -> ein Eintrag weniger
+TURBO_ADD_BELOW = 30   # Turbo: < 30 % -> zusätzlicher Eintrag
+QUESTION_OK_AT = 50    # Turbo: ab 50 % zählt die Frage als richtig beantwortet
+QUESTION_DONE = 3      # nach 3 richtigen Antworten fliegt die Frage aus dem Pool  # letzter Eintrag mit >= 70 % entfernt -> 3 Wochen Pause, danach wieder 1x im Rad
 
 LOCK = threading.Lock()
 RNG = random.SystemRandom()
@@ -119,6 +123,15 @@ CREATE TABLE IF NOT EXISTS subject_day_out (
     reason      TEXT NOT NULL,              -- drawn | absent | other
     PRIMARY KEY (subject_id, student_id)
 );
+CREATE TABLE IF NOT EXISTS questions (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    subject_id  TEXT NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
+    text        TEXT NOT NULL,
+    sort        INTEGER NOT NULL,
+    correct     INTEGER NOT NULL DEFAULT 0,
+    done_at     INTEGER                     -- gesetzt = 3x richtig beantwortet, nicht mehr im Pool
+);
+CREATE INDEX IF NOT EXISTS idx_questions_subject ON questions(subject_id, sort);
 CREATE INDEX IF NOT EXISTS idx_students_class ON students(class_id);
 CREATE INDEX IF NOT EXISTS idx_history_class ON history(class_id, id);
 """
@@ -189,6 +202,11 @@ def init_db():
                 con.execute("ALTER TABLE history ADD COLUMN note TEXT")
             if "rated_by" not in hcols:
                 con.execute("ALTER TABLE history ADD COLUMN rated_by TEXT")
+            if "question" not in hcols:
+                con.execute("ALTER TABLE history ADD COLUMN question TEXT")
+            fcols = [r[1] for r in con.execute("PRAGMA table_info(subjects)")]
+            if "turbo_last" not in fcols:
+                con.execute("ALTER TABLE subjects ADD COLUMN turbo_last INTEGER")   # sort der zuletzt gestellten Frage
             migrate_v1(con)
             migrate_subjects(con)
             migrate_jokers(con)
@@ -226,7 +244,7 @@ def migrate_subjects(con):
     """Ab v2.2 gehört das Rad zu einem Fach. Klassen ohne Fach bekommen das Fach „Allgemein“."""
     for (cid,) in con.execute("SELECT id FROM classes WHERE id NOT IN (SELECT class_id FROM subjects)").fetchall():
         subj = new_id()
-        con.execute("INSERT INTO subjects VALUES (?,?,?,?,?)", (subj, cid, "Allgemein", 0, int(time.time())))
+        con.execute("INSERT INTO subjects (id, class_id, name, sort, created_at) VALUES (?,?,?,?,?)", (subj, cid, "Allgemein", 0, int(time.time())))
         old = [r[0] for r in con.execute(
             "SELECT student_id FROM pool_entries WHERE class_id=? ORDER BY position", (cid,))]
         write_pool(con, subj, old)
@@ -264,6 +282,10 @@ def clean_note(n):
     return n[:500]
 
 
+def clean_question(q):
+    return re.sub(r"\s+", " ", str(q or "")).strip()[:500]
+
+
 def clean_name(n):
     return re.sub(r"\s+", " ", str(n or "")).strip()[:80]
 
@@ -282,7 +304,7 @@ def write_pool(con, subj, pool):
 def create_subject(con, cid, name):
     subj = new_id()
     sort = con.execute("SELECT COALESCE(MAX(sort),-1)+1 FROM subjects WHERE class_id=?", (cid,)).fetchone()[0]
-    con.execute("INSERT INTO subjects VALUES (?,?,?,?,?)", (subj, cid, name, sort, int(time.time())))
+    con.execute("INSERT INTO subjects (id, class_id, name, sort, created_at) VALUES (?,?,?,?,?)", (subj, cid, name, sort, int(time.time())))
     pool = [r[0] for r in con.execute("SELECT id FROM students WHERE class_id=?", (cid,))]
     RNG.shuffle(pool)
     write_pool(con, subj, pool)
@@ -338,13 +360,18 @@ def class_obj(con, cid, subj=None):
         LEFT JOIN subject_jokers j ON j.student_id=s.id AND j.subject_id=?
         WHERE s.class_id=? ORDER BY s.sort, s.name""", (subj, cid))]
     history = [{"id": r["id"], "ts": r["ts"], "type": r["type"], "studentId": r["student_id"], "name": r["name"],
-                "score": r["score"], "outcome": r["outcome"], "note": r["note"] or "", "by": r["rated_by"] or ""}
+                "score": r["score"], "outcome": r["outcome"], "note": r["note"] or "", "by": r["rated_by"] or "",
+                "question": r["question"] or ""}
                for r in con.execute("SELECT * FROM history WHERE subject_id=? ORDER BY id DESC LIMIT 1000", (subj,))]
     pauses = {r[0]: r[1] for r in con.execute("SELECT student_id, until FROM subject_pause WHERE subject_id=?", (subj,))}
     day_out = {r[0]: {"day": r[1], "reason": r[2]} for r in con.execute(
         "SELECT student_id, day, reason FROM subject_day_out WHERE subject_id=?", (subj,))}
+    questions = [{"id": r["id"], "text": r["text"], "sort": r["sort"], "correct": r["correct"], "done": r["done_at"]}
+                 for r in con.execute("SELECT * FROM questions WHERE subject_id=? ORDER BY sort", (subj,))]
+    turbo_last = con.execute("SELECT turbo_last FROM subjects WHERE id=?", (subj,)).fetchone()[0]
     return {"id": c["id"], "name": c["name"], "students": students, "subjects": subjects,
-            "subject": subj, "pool": read_pool(con, subj), "pauses": pauses, "dayOut": day_out, "history": history}
+            "subject": subj, "pool": read_pool(con, subj), "pauses": pauses, "dayOut": day_out, "history": history,
+            "questions": questions, "turboLast": -1 if turbo_last is None else turbo_last}
 
 
 def get_student(con, cid, sid):
@@ -354,7 +381,9 @@ def get_student(con, cid, sid):
     return r
 
 
-def outcome_for(score):
+def outcome_for(score, turbo=False):
+    if turbo:
+        return "removed" if score >= TURBO_REMOVE_AT else "kept" if score >= TURBO_ADD_BELOW else "added"
     if score >= REMOVE_AT:
         return "removed"
     if score >= KEEP_AT:
@@ -804,6 +833,31 @@ def route(con, method, parts, body, user):
                                WHERE subject_id=? AND student_id=? AND type='joker')""", key)
             return class_obj(con, cid, subj)
 
+    # ---- Fragenpool eines Fachs (für den Turbo-Modus)
+    if rest == ["subject", "questions"] and method == "POST":
+        texts = body.get("texts") or []
+        if isinstance(texts, str):
+            texts = texts.splitlines()
+        sort = con.execute("SELECT COALESCE(MAX(sort),-1)+1 FROM questions WHERE subject_id=?", (need_subject(),)).fetchone()[0]
+        for t in map(clean_question, texts):
+            if t:
+                con.execute("INSERT INTO questions (subject_id, text, sort) VALUES (?,?,?)", (subj, t, sort))
+                sort += 1
+        return class_obj(con, cid, subj)
+
+    if len(rest) == 3 and rest[:2] == ["subject", "questions"] and method in ("PUT", "DELETE"):
+        q = con.execute("SELECT * FROM questions WHERE id=? AND subject_id=?", (rest[2], need_subject())).fetchone()
+        if not q:
+            raise ApiError(404, "Frage nicht gefunden")
+        if method == "DELETE":
+            con.execute("DELETE FROM questions WHERE id=?", (q["id"],))
+        elif body.get("restore"):   # erledigte Frage wieder hinten anhängen, Zähler auf 0
+            sort = con.execute("SELECT COALESCE(MAX(sort),-1)+1 FROM questions WHERE subject_id=?", (subj,)).fetchone()[0]
+            con.execute("UPDATE questions SET done_at=NULL, correct=0, sort=? WHERE id=?", (sort, q["id"]))
+        elif clean_question(body.get("text")):
+            con.execute("UPDATE questions SET text=? WHERE id=?", (clean_question(body.get("text")), q["id"]))
+        return class_obj(con, cid, subj)
+
     # ---- heute nicht ins Rad (pro Fach): abwesend, außerhalb des Rads dran – oder wieder zurückholen
     if len(rest) == 4 and rest[0] == "subject" and rest[1] == "students" and rest[3] == "today" and method == "PUT":
         s = get_student(con, cid, rest[2])
@@ -886,7 +940,8 @@ def route(con, method, parts, body, user):
             score = max(0, min(100, round(float(body.get("score")))))
         except (TypeError, ValueError):
             raise ApiError(400, "Ungültige Bewertung")
-        outcome = outcome_for(score)
+        turbo = bool(body.get("turbo"))
+        outcome = outcome_for(score, turbo)
         pool = read_pool(con, subj)
         pos = body.get("position")
         if outcome == "removed" and s["id"] in pool:
@@ -900,13 +955,24 @@ def route(con, method, parts, body, user):
         elif outcome == "added":
             insert_random(pool, s["id"])
         write_pool(con, subj, pool)
+        question = None
+        if turbo and body.get("questionId") is not None:
+            q = con.execute("SELECT * FROM questions WHERE id=? AND subject_id=? AND done_at IS NULL",
+                            (body.get("questionId"), subj)).fetchone()
+            if q:
+                question = q["text"]
+                con.execute("UPDATE subjects SET turbo_last=? WHERE id=?", (q["sort"], subj))   # nächstes Mal die folgende Frage
+                if score >= QUESTION_OK_AT:
+                    con.execute("UPDATE questions SET correct=correct+1 WHERE id=?", (q["id"],))
+                    if q["correct"] + 1 >= QUESTION_DONE:
+                        con.execute("UPDATE questions SET done_at=? WHERE id=?", (int(time.time()), q["id"]))
         if body.get("day"):    # pro Tag nur einmal drankommen
             con.execute("INSERT OR REPLACE INTO subject_day_out VALUES (?,?,?,'drawn')", (subj, s["id"], valid_day(body["day"])))
         con.execute(
-            "INSERT INTO history (class_id, subject_id, ts, type, student_id, name, score, outcome, note, rated_by)"
-            " VALUES (?,?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO history (class_id, subject_id, ts, type, student_id, name, score, outcome, note, rated_by, question)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?)",
             (cid, subj, int(time.time()), "rate", s["id"], s["name"], score, outcome,
-             clean_note(body.get("note")), user["username"]))
+             clean_note(body.get("note")), user["username"], question if question is not None else ("" if turbo else None)))
         return class_obj(con, cid, subj)
 
     raise ApiError(404, "Unbekannte Route")

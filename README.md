@@ -67,6 +67,11 @@ Update: `podman build --format docker -t gluecksrad .` und `systemctl --user res
   („✓ gezogen“); die Einträge bleiben, am nächsten Tag ist sie/er wieder dabei. „Überspringen“ zählt nicht.
 - **Spalte „Heute“** in der Namensliste: *abwesend* oder *schon dran* (außerhalb des Rads) nimmt jemanden für heute aus
   dem Rad, ebenso ein 🃏 Joker. Zurück auf „–“ holt die Person heute wieder ins Rad.
+- **⚡ Turbo-Modus** (Knopf neben „Drehen“, pro Fach): Rad und Töne laufen 5× schneller, nach der Ziehung erscheint eine
+  Frage aus dem **Fragenpool** des Fachs (Tab „Fragen“: eine Zeile pro Frage, neue unten anhängen) – der Reihe nach,
+  „andere Frage ↻“ springt eine weiter. Bewertung im Turbo: **≥ 90 %** −1 Eintrag, **30–89 %** bleibt, **< 30 %** +1.
+  Ab 50 % zählt die Frage als richtig; nach 3 richtigen Antworten fliegt sie aus dem Pool (unter „Erledigt“ zurückholbar).
+  „Pro Tag nur einmal dran“ gilt auch im Turbo.
 - Verlauf mit Statistik, Hell-/Dunkel-Modus, Tastatur: Leertaste = drehen, Enter = speichern, Pfeiltasten = Bewertung
 
 ## Fehler „attempt to write a readonly database“

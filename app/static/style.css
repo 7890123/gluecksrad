@@ -416,3 +416,20 @@ button,.chip,.hub,a{touch-action:manipulation;-webkit-tap-highlight-color:transp
 .hidden-egg{position:absolute;width:22px;height:22px;cursor:pointer;z-index:5;opacity:.92;filter:drop-shadow(0 2px 3px rgba(0,0,0,.35));transition:transform .2s}
 .hidden-egg:hover{transform:scale(1.4) rotate(0)!important}
 #tab .panel,.topbar{position:relative}
+
+/* ---------- Turbo & Fragen ---------- */
+.turbobtn.on{background:linear-gradient(135deg,#ffb300,#ff5e00);color:#fff;border-color:transparent;box-shadow:0 0 18px rgba(255,140,0,.55)}
+html.turbo .wheel .glow{filter:hue-rotate(-40deg) saturate(1.6)}
+.qbox{margin:4px 0 14px;padding:12px 14px;border-radius:16px;background:color-mix(in srgb,#ff9800 14%,transparent);border:1px solid color-mix(in srgb,#ff9800 45%,transparent)}
+.qmeta{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
+.qtext{font-size:20px;font-weight:700;line-height:1.3;margin-top:4px;white-space:pre-wrap}
+.qlist{list-style:none;padding:0;margin:16px 0 0;display:flex;flex-direction:column;gap:4px}
+.qlist li{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:12px;border:1px solid var(--stroke);background:var(--glass-2)}
+.qlist li.next{border-color:color-mix(in srgb,#ff9800 60%,transparent)}
+.qlist .qn{width:16px;flex:none;color:#ff9800}
+.qlist .qt{flex:1;min-width:0}
+.qdots{flex:none;font-size:13px;letter-spacing:2px;color:var(--good)}
+.qdone{margin-top:16px} .qdone summary{cursor:pointer;color:var(--muted)}
+.qdone .qt{color:var(--muted);text-decoration:line-through}
+.notecell .qline{display:block;font-size:13px;color:var(--muted)}
+html.turbo #scoreRange{background:linear-gradient(90deg,var(--bad) 0%,var(--bad) 29%,var(--mid) 30%,var(--mid) 89%,var(--good) 90%,var(--good) 100%)}

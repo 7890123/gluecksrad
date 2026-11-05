@@ -6,6 +6,9 @@ const Sound = (() => {
 
   const cfg = { tick: "ratchet", win: "fanfare", roll: true, volume: 0.6 };
   let season = "none";
+  // Turbo: alle Töne um diesen Faktor schneller (Zeitpunkte und Längen werden ab dem Startzeitpunkt gestaucht)
+  let speed = 1, base = 0;
+  const at = t => base + (t - base) / speed;
   const custom = { tick: null, win: null };       // AudioBuffer
   const customRaw = { tick: null, win: null };    // ArrayBuffer (vor dem Dekodieren)
 
@@ -45,6 +48,7 @@ const Sound = (() => {
   }
 
   function tone(freq, t0, dur, { type = "sine", vol = 0.25, attack = 0.005, glideTo = null, filter = null } = {}) {
+    t0 = at(t0); dur /= speed; attack /= speed;
     const o = ctx.createOscillator(), g = ctx.createGain();
     o.type = type; o.frequency.setValueAtTime(freq, t0);
     if (glideTo) o.frequency.exponentialRampToValueAtTime(glideTo, t0 + dur);
@@ -58,6 +62,7 @@ const Sound = (() => {
   }
 
   function noise(t0, dur, { vol = 0.2, type = "bandpass", freq = 2000, q = 1, freqTo = null, attack = null } = {}) {
+    t0 = at(t0); dur /= speed; if (attack !== null) attack /= speed;
     const s = ctx.createBufferSource(); s.buffer = noiseBuf;
     const f = ctx.createBiquadFilter(); f.type = type; f.frequency.setValueAtTime(freq, t0); f.Q.value = q;
     if (freqTo) f.frequency.exponentialRampToValueAtTime(freqTo, t0 + dur);
@@ -71,13 +76,14 @@ const Sound = (() => {
 
   function playBuffer(buf, { vol = 1, rate = 1, when = null } = {}) {
     const s = ctx.createBufferSource(), g = ctx.createGain();
+    rate *= speed;
     s.buffer = buf; s.playbackRate.value = rate; g.gain.value = vol;
     s.connect(g); g.connect(master); s.start(when ?? ctx.currentTime);
     keepAlive(buf.duration / Math.max(0.1, rate) + 1);
     return { s, g };
   }
 
-  const play = fn => { if (muted || !ac()) return; fn(ctx.currentTime); };
+  const play = fn => { if (muted || !ac()) return; base = ctx.currentTime; fn(base); };
   // eigene Datei: kurz (< 0,6 s) = wird bei jedem Feld abgespielt, länger = läuft während der Drehung mit
   const customTickIsLoop = () => custom.tick && custom.tick.duration >= 0.6;
 
@@ -113,6 +119,7 @@ const Sound = (() => {
     l.frequency.value = rate; g.gain.value = depth; l.connect(g); g.connect(o.frequency); l.start(t); l.stop(t + dur + .1);
   }
   function voice(freq, t, dur, { type = "sine", vol = .2, to = null, vib = 0, rate = 6, filter = null } = {}) {
+    t = at(t); dur /= speed;
     const o = ctx.createOscillator(), g = ctx.createGain();
     o.type = type; o.frequency.setValueAtTime(freq, t); if (to) o.frequency.exponentialRampToValueAtTime(to, t + dur);
     if (vib) vibrato(o, t, rate, vib, dur);
@@ -218,6 +225,7 @@ const Sound = (() => {
     hasCustom(kind) { return !!customRaw[kind]; },
     customInfo(kind) { return custom[kind] ? custom[kind].duration : null; },
     setSeason(s) { season = s; },
+    setSpeed(f) { speed = f > 0 ? f : 1; },
     configure(c) {
       Object.assign(cfg, c || {});
       if (master) master.gain.value = cfg.volume;
@@ -240,7 +248,7 @@ const Sound = (() => {
     spinSpeed(sp) {
       if (!spinLoop) return;
       const t = ctx.currentTime;
-      spinLoop.s.playbackRate.setTargetAtTime(0.55 + 0.6 * sp, t, 0.05);
+      spinLoop.s.playbackRate.setTargetAtTime((0.55 + 0.6 * sp) * speed, t, 0.05);
       spinLoop.g.gain.setTargetAtTime(Math.max(0.05, Math.min(1, 0.25 + sp)), t, 0.05);
     },
     spinStop() {
@@ -268,10 +276,10 @@ const Sound = (() => {
       const s = ctx.createBufferSource(); s.buffer = noiseBuf; s.loop = true;
       const f = ctx.createBiquadFilter(); f.type = "bandpass"; f.frequency.value = 420; f.Q.value = 0.9;
       const trem = ctx.createGain(); trem.gain.value = 0.5;
-      const lfo = ctx.createOscillator(); lfo.frequency.setValueAtTime(14, t); lfo.frequency.linearRampToValueAtTime(24, t + duration);
+      const lfo = ctx.createOscillator(); lfo.frequency.setValueAtTime(14 * Math.sqrt(speed), t); lfo.frequency.linearRampToValueAtTime(24, t + duration);
       const lfoG = ctx.createGain(); lfoG.gain.value = 0.5; lfo.connect(lfoG); lfoG.connect(trem.gain);
       const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t);
-      g.gain.exponentialRampToValueAtTime(0.14, t + 0.4);
+      g.gain.exponentialRampToValueAtTime(0.14, t + Math.min(0.4 / speed, duration / 2));
       g.gain.linearRampToValueAtTime(0.34, t + duration);
       s.connect(f); f.connect(trem); trem.connect(g); g.connect(master);
       s.start(t); lfo.start(t);

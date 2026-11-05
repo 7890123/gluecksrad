@@ -10,7 +10,11 @@ const state = {
 /* ---------------- Hilfsfunktionen ---------------- */
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-const outcomeOf = s => s >= 70 ? "removed" : s >= 50 ? "kept" : "added";
+// Turbo-Modus (pro Fach, im Browser gemerkt): Fragen aus dem Pool, Rad und Ton 5x schneller, eigene Schwellen
+const TURBO_SPEED = 5;
+const isTurbo = () => !!state.current && store.get("turbo:" + state.current.subject) === "1";
+const outcomeOf = s => isTurbo() ? (s >= 90 ? "removed" : s >= 30 ? "kept" : "added") : s >= 70 ? "removed" : s >= 50 ? "kept" : "added";
+const Q_OK = 50, Q_DONE = 3;   // Frage zählt ab 50 % als richtig, nach 3x richtig ist sie erledigt
 const OUT_TEXT_STD = { removed: "fliegt aus dem Rad", kept: "bleibt im Rad", added: "kommt ein zusätzliches Mal ins Rad" };
 const OUT_SHORT_STD = { removed: "raus", kept: "bleibt", added: "+1 im Rad" };
 /* Saison-Themes: alles, was sich je Theme unterscheidet, an einer Stelle */
@@ -100,6 +104,7 @@ function setCurrent(c) {
   state.current = c;
   $("#mTitle").textContent = c ? c.name : "Glücksrad";
   store.set("lastSubject:" + c.id, c.subject);
+  applyTurbo();
   const s = state.classes.find(x => x.id === c.id);
   if (s) { s.students = c.students.length; s.subjects = c.subjects.length; }
   renderClassList(); renderMain();
@@ -127,6 +132,7 @@ function renderMain() {
       <div class="seg">
         <button data-tab="wheel" class="${state.tab === "wheel" ? "on" : ""}">Glücksrad</button>
         <button data-tab="students" class="${state.tab === "students" ? "on" : ""}">Schülerliste</button>
+        <button data-tab="questions" class="${state.tab === "questions" ? "on" : ""}">Fragen</button>
         <button data-tab="history" class="${state.tab === "history" ? "on" : ""}">Verlauf</button>
       </div>
       <div class="subjects">
@@ -163,7 +169,7 @@ function renderMain() {
     const n = prompt("Neuer Name der Klasse:", c.name);
     if (n) setCurrent(await api("PUT", "/classes/" + c.id, { name: n, subject: c.subject }));
   };
-  ({ wheel: renderWheelTab, students: renderStudentsTab, history: renderHistoryTab })[state.tab]();
+  ({ wheel: renderWheelTab, students: renderStudentsTab, history: renderHistoryTab, questions: renderQuestionsTab })[state.tab]();
   const newPool = m.querySelector(".pool"); if (newPool && poolScroll) newPool.scrollTop = poolScroll;
 }
 
@@ -196,8 +202,11 @@ function renderWheelTab() {
           <button class="btn" id="shuffleBtn" title="Reihenfolge im Rad zufällig mischen">🎲 Mischen</button>
           <button class="btn primary" id="spin">${SEASON().spin}</button>
           <button class="btn" id="resetBtn" title="Jede/n genau einmal ins Rad">↺ Zurücksetzen</button>
+          <button class="btn turbobtn ${isTurbo() ? "on" : ""}" id="turboBtn" title="Turbo: Fragen aus dem Pool der Reihe nach, Rad und Ton 5× schneller">⚡ Turbo</button>
         </div>
-        <div class="hint"><span><b class="g">≥ 70 %</b> −1 (letzter → 3 Wochen Pause)</span><span><b class="m">50–69 %</b> bleibt</span><span><b class="r">&lt; 50 %</b> +1 im Rad</span><span>Leertaste = drehen</span></div>
+        <div class="hint">${isTurbo()
+          ? `<span><b>⚡ Turbo</b> · ${activeQuestions().length} Fragen</span><span><b class="g">≥ 90 %</b> −1</span><span><b class="m">30–89 %</b> bleibt</span><span><b class="r">&lt; 30 %</b> +1 im Rad</span>`
+          : `<span><b class="g">≥ 70 %</b> −1 (letzter → 3 Wochen Pause)</span><span><b class="m">50–69 %</b> bleibt</span><span><b class="r">&lt; 50 %</b> +1 im Rad</span>`}<span>Leertaste = drehen</span></div>
       </div>
       <div class="side">
         ${last ? `<div class="glass panel"><h3>Zuletzt gezogen</h3>
@@ -232,6 +241,12 @@ function renderWheelTab() {
   setControls();
   $("#spin").onclick = $("#hub").onclick = spin;
   $("#shuffleBtn").onclick = shuffle;
+  $("#turboBtn").onclick = () => {
+    if (state.spinning || state.pendingRating) return;
+    const on = !isTurbo(); store.set("turbo:" + c.subject, on ? "1" : "0");
+    applyTurbo(); renderMain(); safe(() => { Sound.unlock(); on ? Sound.pop() : Sound.click(); });
+    toast(on ? (activeQuestions().length ? "⚡ Turbo an – Fragen der Reihe nach" : "⚡ Turbo an – noch keine Fragen im Tab „Fragen“") : "Turbo aus");
+  };
   $("#resetBtn").onclick = async () => {
     const paused = Object.keys(state.current.pauses).length;
     if (!confirm("Rad zurücksetzen? Jede/r Schüler/in ist danach genau einmal im Rad (zufällige Reihenfolge)."
@@ -449,7 +464,8 @@ function spin() {
   const mo = buildMotion(state.rotation % TAU, k, n);
   state.rotation = mo.start; state.spinning = true; state.winnerPos = null; state.drawn = null;
   setControls();
-  if (isXmas()) snow(mo.total * 1000 - 1500, 110);
+  const SP = isTurbo() ? TURBO_SPEED : 1;     // Turbo: Zeitachse der Bewegung 5x schneller
+  if (isXmas()) snow(mo.total * 1000 / SP - 1500 / SP, 110);
   const box = $("#wheelBox"); if (box) box.classList.add("spinning");
   let lastIdx = pointerIndex(state.rotation, n), lastAng = state.rotation, rolling = false, lastLight = 0;
   const t0 = performance.now();
@@ -465,14 +481,14 @@ function spin() {
     if (isHW()) bats(4);
     if (isXmas()) snow(5000, 90);
     if (isEaster()) bunnies(1);
-    animateWinner(); setControls();
-    setTimeout(() => { state.pendingRating = false; openRating(segs[pos], segs[pos].pos); }, 650);
+    animateWinner(1600 / SP); setControls();
+    setTimeout(() => { state.pendingRating = false; openRating(segs[pos], segs[pos].pos); }, 650 / SP);
   };
   (function frame(now) {
-    const t = (now - t0) / 1000;
+    const t = (now - t0) / 1000 * SP;
     const ang = mo.angleAt(t);
     try {
-      const speed = Math.min(1, Math.abs(ang - lastAng) / (1 / 60) / mo.vmax);
+      const speed = Math.min(1, Math.abs(ang - lastAng) / (SP / 60) / mo.vmax);
       lastAng = ang; state.rotation = ang;
       setHub(-ang * 180 / Math.PI * 1.7);
       safe(() => Sound.spinSpeed(speed));
@@ -480,7 +496,7 @@ function spin() {
       if (idx !== lastIdx) { lastIdx = idx; safe(() => Sound.tick(speed)); state.pointerKick = -14 - 14 * (1 - speed); }
       state.pointerKick *= 0.82;
       if (now - lastLight > 90 + (1 - speed) * 250) { state.lights++; lastLight = now; }
-      if (!rolling && t >= mo.suspenseAt) { rolling = true; safe(() => Sound.rollStart(mo.total - mo.suspenseAt)); }
+      if (!rolling && t >= mo.suspenseAt) { rolling = true; safe(() => Sound.rollStart((mo.total - mo.suspenseAt) / SP)); }
       drawWheel();
     } catch (e) { console.warn(e); }
     if (t < mo.total) requestAnimationFrame(frame); else finish(ang);
@@ -501,8 +517,8 @@ function hubWobble() {
 }
 // Gewinner-Feld kurz pulsieren lassen, dann statisch – keine Dauer-Animation im Leerlauf
 // (sonst müssten Canvas und die Unschärfe hinter dem Bewertungsdialog ständig neu berechnet werden).
-function animateWinner() {
-  const until = performance.now() + 1600;
+function animateWinner(ms = 1600) {
+  const until = performance.now() + ms;
   const loop = () => {
     if (state.winnerPos === null || state.spinning) return;
     if (performance.now() < until) { drawWheel(); requestAnimationFrame(loop); }
@@ -545,7 +561,9 @@ function setScore(v) {
   const box = $("#resultBox"), s = state.drawn;
   const last = s && o === "removed" && state.current.pool.filter(id => id === s.id).length === 1;
   box.className = "result o-" + o;
-  box.textContent = `${s ? s.name : ""} ${OUT_TEXT[o]}${last ? " – 3 Wochen Pause, danach wieder 1× im Rad" : ""}`;
+  const q = isTurbo() && currentQuestion();
+  box.textContent = `${s ? s.name : ""} ${OUT_TEXT[o]}${last ? " – 3 Wochen Pause, danach wieder 1× im Rad" : ""}`
+    + (q ? ` · Frage ${v >= Q_OK ? `richtig (${q.correct + 1}/${Q_DONE})${q.correct + 1 >= Q_DONE ? " – fliegt raus" : ""}` : "nicht richtig"}` : "");
 }
 range.oninput = () => setScore(range.value);
 // Schnell-Notizen: Klick fügt den Text ins Notizfeld ein
@@ -562,7 +580,29 @@ function openRating(s, pos) {
   const av = $("#winAvatar"); av.textContent = initials(s.name); av.style.background = `linear-gradient(135deg, ${colorFor(s.id, 62)}, ${colorFor(s.id, 42)})`;
   const live = state.current.students.find(x => x.id === s.id) || s, jb = $("#jokerBtn");
   jb.hidden = !live.jokers; jb.textContent = `🃏 Joker (${live.jokers})`;
+  state.qSkip = 0; renderQuestionBox();
   setScore(60); if (!dlg.open) dlg.showModal(); $("#saveBtn").focus();
+}
+// Turbo: Fragen der Reihe nach – die nächste nach der zuletzt gestellten; „andere Frage“ springt eine weiter
+function activeQuestions() { return state.current ? state.current.questions.filter(q => !q.done) : []; }
+function currentQuestion() {
+  const qs = activeQuestions(); if (!qs.length) return null;
+  const start = Math.max(0, qs.findIndex(q => q.sort > state.current.turboLast));
+  return qs[(start + (state.qSkip || 0)) % qs.length];
+}
+function renderQuestionBox() {
+  const box = $("#qBox"), qs = activeQuestions(), q = currentQuestion();
+  box.hidden = !isTurbo();
+  if (!isTurbo()) return;
+  $("#qText").textContent = q ? q.text : "Noch keine Fragen – im Tab „Fragen“ anlegen.";
+  $("#qMeta").textContent = q ? `⚡ Frage ${qs.indexOf(q) + 1} von ${qs.length} · ${"✓".repeat(q.correct)}${"○".repeat(Q_DONE - q.correct)}` : "⚡ Turbo";
+  $("#qNext").hidden = qs.length < 2;
+}
+$("#qNext").onclick = () => { state.qSkip = (state.qSkip || 0) + 1; renderQuestionBox(); setScore(range.value); Sound.click(); };
+function applyTurbo() {
+  const on = isTurbo();
+  document.documentElement.classList.toggle("turbo", on);
+  safe(() => Sound.setSpeed(on ? TURBO_SPEED : 1));
 }
 $("#jokerBtn").onclick = async () => {
   const s = state.drawn; if (!s) return;
@@ -575,12 +615,15 @@ dlg.addEventListener("cancel", e => { e.preventDefault(); closeRating(); });
 $("#saveBtn").onclick = async () => {
   const c = state.current, s = state.drawn; if (!s) return;
   const score = +range.value, o = outcomeOf(score), pos = state.drawnPos, note = $("#noteInput").value.trim();
+  const turbo = isTurbo(), q = turbo ? currentQuestion() : null;
   dlg.close(); state.drawn = null; state.winnerPos = null;
   safe(() => Sound[o]());
   if (o === "removed") safe(() => confetti(180));
   try {
-    const c2 = await api("POST", `/classes/${c.id}/subjects/${c.subject}/rate`, { studentId: s.id, score, position: pos, note, day: today() });
+    const c2 = await api("POST", `/classes/${c.id}/subjects/${c.subject}/rate`, { studentId: s.id, score, position: pos, note, day: today(),
+      turbo, questionId: q ? q.id : null });
     if (o === "added") flashStudents([s.id]);
+    if (q && score >= Q_OK && q.correct + 1 >= Q_DONE) toast(`⚡ Frage 3× richtig beantwortet – raus aus dem Pool`);
     setCurrent(c2);
   } catch (e) { renderMain(); }
 };
@@ -689,6 +732,43 @@ function renderStudentsTab() {
     setCurrent(await api("PUT", subjUrl(`/students/${b.dataset.sid}/joker`), { delta: +b.dataset.jk })));
 }
 
+/* ---------------- Fragen (Turbo) ---------------- */
+function renderQuestionsTab() {
+  const c = state.current, qs = activeQuestions(), done = c.questions.filter(q => q.done), next = currentQuestion();
+  const dots = q => `<span class="qdots" title="${q.correct} von ${Q_DONE} richtig">${"✓".repeat(q.correct)}${"○".repeat(Math.max(0, Q_DONE - q.correct))}</span>`;
+  $("#tab").innerHTML = `<div class="glass card">
+    <div class="label">Fragen · ${esc(currentSubject().name)}</div>
+    <div class="muted" style="margin:4px 0 10px">Eine Frage pro Zeile – neue werden unten angehängt. Im ⚡ Turbo kommen sie der Reihe nach dran (▶ = nächste).
+      Ab ${Q_OK} % zählt eine Antwort als richtig; nach ${Q_DONE} richtigen Antworten fliegt die Frage aus dem Pool.</div>
+    <textarea id="qNew" rows="4" placeholder="Was ist die Hauptstadt von Frankreich?&#10;Nenne drei Laubbäume.&#10;…"></textarea>
+    <div class="row" style="margin-top:10px;justify-content:space-between">
+      <span class="muted">${qs.length} Fragen im Pool${done.length ? ` · ${done.length} erledigt` : ""}</span>
+      <button class="btn primary" id="qAdd">Anhängen</button>
+    </div>
+    ${qs.length ? `<ol class="qlist">${qs.map(q => `<li class="${q === next ? "next" : ""}"><span class="qn">${q === next ? "▶" : ""}</span><span class="qt">${esc(q.text)}</span>${dots(q)}
+      <button class="btn ghost icon" data-qedit="${q.id}" title="Bearbeiten">✏️</button><button class="btn ghost icon danger" data-qdel="${q.id}" title="Löschen">✕</button></li>`).join("")}</ol>` : ""}
+    ${done.length ? `<details class="qdone"><summary>Erledigt (${done.length})</summary><ul class="qlist">${done.map(q => `<li><span class="qt">${esc(q.text)}</span>
+      <button class="btn ghost small" data-qrestore="${q.id}" title="Wieder hinten anhängen, Zähler auf 0">↺ zurückholen</button><button class="btn ghost icon danger" data-qdel="${q.id}" title="Löschen">✕</button></li>`).join("")}</ul></details>` : ""}
+  </div>`;
+  const byId = id => c.questions.find(q => String(q.id) === id);
+  $("#qAdd").onclick = async () => {
+    const texts = $("#qNew").value.split(/\r?\n/).map(x => x.trim()).filter(Boolean);
+    if (!texts.length) return;
+    setCurrent(await api("POST", subjUrl("/questions"), { texts })); Sound.pop();
+    toast(texts.length === 1 ? "Frage angehängt" : `${texts.length} Fragen angehängt`);
+  };
+  document.querySelectorAll("[data-qedit]").forEach(b => b.onclick = async () => {
+    const q = byId(b.dataset.qedit), t = prompt("Frage:", q.text);
+    if (t && t.trim()) setCurrent(await api("PUT", subjUrl("/questions/" + q.id), { text: t }));
+  });
+  document.querySelectorAll("[data-qdel]").forEach(b => b.onclick = async () => {
+    const q = byId(b.dataset.qdel);
+    if (confirm(`Frage löschen?\n\n${q.text}`)) setCurrent(await api("DELETE", subjUrl("/questions/" + q.id)));
+  });
+  document.querySelectorAll("[data-qrestore]").forEach(b => b.onclick = async () =>
+    setCurrent(await api("PUT", subjUrl("/questions/" + b.dataset.qrestore), { restore: true })));
+}
+
 /* ---------------- Verlauf ---------------- */
 function renderHistoryTab() {
   const c = state.current, filter = state.histFilter || "";
@@ -706,7 +786,7 @@ function renderHistoryTab() {
     : `<tr><td class="nowrap">${fmt(h.ts)}${team && h.by ? `<div class="muted small">${esc(h.by)}</div>` : ""}</td>
         <td><a href="#" class="stud" data-stud="${h.studentId}">${esc(h.name)}</a></td><td class="nowrap">${h.score} %</td>
         <td><span class="pill o-${h.outcome}">${OUT_SHORT[h.outcome]}</span></td>
-        <td class="notecell"><span class="notetext">${h.note ? esc(h.note) : '<span class="muted">–</span>'}</span>
+        <td class="notecell"><span class="notetext">${h.question ? `<span class="qline">⚡ ${esc(h.question)}</span>` : ""}${h.note ? esc(h.note) : h.question ? "" : '<span class="muted">–</span>'}</span>
           <button class="btn ghost icon small" data-note="${h.id}" title="Notiz bearbeiten">✏️</button></td></tr>`).join("");
   const fname = filter ? (c.students.find(s => s.id === filter) || {}).name : "";
   $("#tab").innerHTML = `<div class="glass card">
@@ -1011,7 +1091,7 @@ async function enterApp(user) {
   else renderMain();
 }
 $("#logoutBtn").onclick = async () => { await api("POST", "/auth/logout"); state.user = null; showAuth(false); };
-$("#usersBtn").onclick = () => { if (state.spinning || state.pendingRating) return; state.view = "users"; state.current = null; renderClassList(); renderMain(); };
+$("#usersBtn").onclick = () => { if (state.spinning || state.pendingRating) return; state.view = "users"; state.current = null; applyTurbo(); renderClassList(); renderMain(); };
 $("#pwBtn").onclick = () => { $("#pwForm").reset(); $("#pwDlg").showModal(); };
 $("#pwCancel").onclick = () => $("#pwDlg").close();
 $("#pwForm").onsubmit = async e => {
