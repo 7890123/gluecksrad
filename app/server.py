@@ -25,6 +25,7 @@ PORT = int(os.environ.get("PORT", "8080"))
 
 REMOVE_AT = 70   # >= 70 %  -> ein Eintrag wird aus dem Rad entfernt
 KEEP_AT = 50     # 50–69 %  -> bleibt; < 50 % -> zusätzlicher Eintrag an zufälliger Position
+DAY_OUT_REASONS = ("drawn", "absent", "other")   # heute dran gewesen · abwesend · außerhalb des Rads dran
 PAUSE_DAYS = 21  # letzter Eintrag mit >= 70 % entfernt -> 3 Wochen Pause, danach wieder 1x im Rad
 
 LOCK = threading.Lock()
@@ -109,6 +110,13 @@ CREATE TABLE IF NOT EXISTS subject_jokers (
     student_id  TEXT NOT NULL REFERENCES students(id) ON DELETE CASCADE,
     jokers      INTEGER NOT NULL DEFAULT 0,
     joker_day   TEXT,                       -- JJJJ-MM-TT: Joker in diesem Fach an diesem Tag eingesetzt
+    PRIMARY KEY (subject_id, student_id)
+);
+CREATE TABLE IF NOT EXISTS subject_day_out (
+    subject_id  TEXT NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
+    student_id  TEXT NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+    day         TEXT NOT NULL,              -- JJJJ-MM-TT (Ortszeit des Browsers)
+    reason      TEXT NOT NULL,              -- drawn | absent | other
     PRIMARY KEY (subject_id, student_id)
 );
 CREATE INDEX IF NOT EXISTS idx_students_class ON students(class_id);
@@ -333,8 +341,10 @@ def class_obj(con, cid, subj=None):
                 "score": r["score"], "outcome": r["outcome"], "note": r["note"] or "", "by": r["rated_by"] or ""}
                for r in con.execute("SELECT * FROM history WHERE subject_id=? ORDER BY id DESC LIMIT 1000", (subj,))]
     pauses = {r[0]: r[1] for r in con.execute("SELECT student_id, until FROM subject_pause WHERE subject_id=?", (subj,))}
+    day_out = {r[0]: {"day": r[1], "reason": r[2]} for r in con.execute(
+        "SELECT student_id, day, reason FROM subject_day_out WHERE subject_id=?", (subj,))}
     return {"id": c["id"], "name": c["name"], "students": students, "subjects": subjects,
-            "subject": subj, "pool": read_pool(con, subj), "pauses": pauses, "history": history}
+            "subject": subj, "pool": read_pool(con, subj), "pauses": pauses, "dayOut": day_out, "history": history}
 
 
 def get_student(con, cid, sid):
@@ -794,6 +804,16 @@ def route(con, method, parts, body, user):
                                WHERE subject_id=? AND student_id=? AND type='joker')""", key)
             return class_obj(con, cid, subj)
 
+    # ---- heute nicht ins Rad (pro Fach): abwesend, außerhalb des Rads dran – oder wieder zurückholen
+    if len(rest) == 4 and rest[0] == "subject" and rest[1] == "students" and rest[3] == "today" and method == "PUT":
+        s = get_student(con, cid, rest[2])
+        day, reason = valid_day(body.get("day")), body.get("reason")
+        if reason in DAY_OUT_REASONS:
+            con.execute("INSERT OR REPLACE INTO subject_day_out VALUES (?,?,?,?)", (subj, s["id"], day, reason))
+        else:
+            con.execute("DELETE FROM subject_day_out WHERE subject_id=? AND student_id=? AND day=?", (subj, s["id"], day))
+        return class_obj(con, cid, subj)
+
     if len(rest) == 2 and rest[0] == "students":
         s = get_student(con, cid, rest[1])
         if method == "PUT":
@@ -880,6 +900,8 @@ def route(con, method, parts, body, user):
         elif outcome == "added":
             insert_random(pool, s["id"])
         write_pool(con, subj, pool)
+        if body.get("day"):    # pro Tag nur einmal drankommen
+            con.execute("INSERT OR REPLACE INTO subject_day_out VALUES (?,?,?,'drawn')", (subj, s["id"], valid_day(body["day"])))
         con.execute(
             "INSERT INTO history (class_id, subject_id, ts, type, student_id, name, score, outcome, note, rated_by)"
             " VALUES (?,?,?,?,?,?,?,?,?,?)",

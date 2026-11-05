@@ -57,6 +57,11 @@ const rand = (a, b) => a + Math.random() * (b - a);
 const initials = n => n.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join("");
 const today = () => new Date().toLocaleDateString("sv");             // JJJJ-MM-TT in Ortszeit
 const jokerToday = s => s.jokerDay === today();                       // Joker eingesetzt -> heute nicht im Rad
+// heute schon dran / abwesend / außerhalb des Rads dran -> heute nicht im Rad dieses Fachs
+const outToday = id => { const o = state.current && state.current.dayOut[id]; return o && o.day === today() ? o.reason : null; };
+const OUT_TODAY = { drawn: "✓ gezogen", absent: "abwesend", other: "schon dran" };
+const todayState = s => jokerToday(s) ? "joker" : outToday(s.id);   // Wert der Spalte „Heute“
+const notToday = s => jokerToday(s) || !!outToday(s.id);
 const fmtDay = ts => new Date(ts * 1000).toLocaleDateString("de-AT", { day: "2-digit", month: "2-digit" });
 
 function studentIndex(id) { return state.current ? state.current.students.findIndex(s => s.id === id) : 0; }
@@ -163,11 +168,12 @@ function renderMain() {
 }
 
 /* ---------------- Glücksrad-Tab ---------------- */
-// Segmente im Rad: Einträge von Schüler/innen mit heutigem Joker bleiben gespeichert, werden aber nicht gezeigt.
+// Segmente im Rad: Einträge von Schüler/innen mit heutigem Joker, die heute schon dran oder abwesend sind,
+// bleiben gespeichert, werden aber nicht gezeigt.
 // pos = Index im gespeicherten Rad (für die Bewertung)
 function poolSegments() {
   const c = state.current, byId = Object.fromEntries(c.students.map(s => [s.id, s]));
-  return c.pool.map((id, pos) => byId[id] && !jokerToday(byId[id]) ? { ...byId[id], pos } : null).filter(Boolean);
+  return c.pool.map((id, pos) => byId[id] && !notToday(byId[id]) ? { ...byId[id], pos } : null).filter(Boolean);
 }
 
 const POINTER_SVG = `<svg class="pointer" id="pointer" viewBox="0 0 54 70">
@@ -205,11 +211,14 @@ function renderWheelTab() {
         </div>
         <div class="glass panel">
           <h3><span>Im Rad: ${poolSegments().length}</span><span class="muted" style="font-weight:400;font-size:13px">${c.students.length} SuS</span></h3>
+          ${c.students.length ? `<div class="poolhead"><span>Name</span><span class="th-today" title="Heute nicht im Rad: abwesend, außerhalb des Rads drangekommen oder schon gezogen – gilt nur heute">Heute</span><span class="th-count">Anzahl</span></div>` : ""}
           ${c.students.length ? `<ul class="pool" data-key="${c.id}:${c.subject}">${c.students.map(s => `
-            <li class="${counts[s.id] && !jokerToday(s) ? "" : "out"}"><span class="dot" style="background:${colorFor(s.id)}"></span>
-              <span class="n">${esc(s.name)}${c.pauses[s.id] ? `<small class="state" title="Kommt am ${fmtDay(c.pauses[s.id])} wieder einmal ins Rad">⏸ bis ${fmtDay(c.pauses[s.id])}</small>` : ""}</span>
-              ${jokerToday(s) ? `<button class="btn joker on" data-unjoker="${s.id}" title="Joker heute eingesetzt – klicken zum Zurücknehmen">🃏 heute</button>`
-                : s.jokers ? `<button class="btn joker" data-joker="${s.id}" title="Joker einsetzen: heute nicht im Rad (noch ${s.jokers})">🃏${s.jokers}</button>` : ""}
+            <li class="${counts[s.id] && !notToday(s) ? "" : "out"}"><span class="dot" style="background:${colorFor(s.id)}"></span>
+              <span class="n" title="${esc(s.name)}">${esc(s.name)}${c.pauses[s.id] ? `<small class="state" title="Kommt am ${fmtDay(c.pauses[s.id])} wieder einmal ins Rad">⏸ bis ${fmtDay(c.pauses[s.id])}</small>` : ""}</span>
+              <select class="today ${todayState(s) ? "on" : ""}" data-today="${s.id}" title="Heute nicht im Rad dieses Fachs (gilt nur heute)${s.jokers ? ` – noch ${s.jokers} Joker` : ""}">
+                <option value="">–</option>${Object.entries(OUT_TODAY).filter(([r]) => r !== "drawn" || todayState(s) === "drawn")
+                  .map(([r, l]) => `<option value="${r}" ${todayState(s) === r ? "selected" : ""}>${l}</option>`).join("")}
+                ${s.jokers || jokerToday(s) ? `<option value="joker" ${todayState(s) === "joker" ? "selected" : ""}>🃏 Joker${jokerToday(s) ? "" : ` (${s.jokers})`}</option>` : ""}</select>
               <button class="btn" data-d="-1" data-id="${s.id}" ${counts[s.id] ? "" : "disabled"}>−</button>
               <span class="badge">${counts[s.id] || 0}</span>
               <button class="btn" data-d="1" data-id="${s.id}">+</button></li>`).join("")}</ul>`
@@ -237,11 +246,16 @@ function renderWheelTab() {
     if (d > 0) flashStudents([b.dataset.id]);
     setCurrent(c2);
   });
-  document.querySelectorAll(".pool [data-joker]").forEach(b => b.onclick = () => useJoker(c.students.find(s => s.id === b.dataset.joker)));
-  document.querySelectorAll(".pool [data-unjoker]").forEach(b => b.onclick = async () => {
-    const s = c.students.find(x => x.id === b.dataset.unjoker);
-    if (!confirm(`Joker von ${s.name} zurücknehmen? ${s.name} ist dann heute wieder im Rad.`)) return;
-    setCurrent(await api("DELETE", subjUrl(`/students/${s.id}/joker`), { day: today() }));
+  document.querySelectorAll(".pool [data-today]").forEach(sel => sel.onchange = async () => {
+    const s = c.students.find(x => x.id === sel.dataset.today), v = sel.value;
+    try {
+      if (v === "joker") { if (!await useJoker(s)) renderMain(); return; }
+      if (jokerToday(s)) {
+        if (!confirm(`Joker von ${s.name} zurücknehmen?`)) { renderMain(); return; }
+        state.current = await api("DELETE", subjUrl(`/students/${s.id}/joker`), { day: today() });
+      }
+      setCurrent(await api("PUT", subjUrl(`/students/${s.id}/today`), { day: today(), reason: v || null }));
+    } catch (e) { renderMain(); }
   });
 }
 
@@ -338,7 +352,7 @@ function drawWheel() {
   if (!n) {
     ctx.beginPath(); ctx.arc(cx, cy, R, 0, TAU); ctx.fillStyle = "rgba(255,255,255,.08)"; ctx.fill();
     ctx.fillStyle = "rgba(255,255,255,.6)"; ctx.font = "600 44px Outfit, system-ui"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-    ctx.fillText("Rad ist leer", cx, cy - 150);
+    ctx.fillText(state.current.pool.length ? "Alle waren heute dran" : "Rad ist leer", cx, cy - 150);
   } else {
     const a = TAU / n;
     ctx.save(); ctx.translate(cx, cy); ctx.rotate(state.rotation); ctx.drawImage(wheelLayer(W, segs), -cx, -cy); ctx.restore();
@@ -563,7 +577,7 @@ $("#saveBtn").onclick = async () => {
   safe(() => Sound[o]());
   if (o === "removed") safe(() => confetti(180));
   try {
-    const c2 = await api("POST", `/classes/${c.id}/subjects/${c.subject}/rate`, { studentId: s.id, score, position: pos, note });
+    const c2 = await api("POST", `/classes/${c.id}/subjects/${c.subject}/rate`, { studentId: s.id, score, position: pos, note, day: today() });
     if (o === "added") flashStudents([s.id]);
     setCurrent(c2);
   } catch (e) { renderMain(); }
@@ -577,7 +591,7 @@ document.addEventListener("keydown", e => {
     else if (e.key === "ArrowLeft" || e.key === "ArrowDown") { e.preventDefault(); setScore(+range.value - 5); }
     return;
   }
-  if (e.code === "Space" && !e.repeat && state.tab === "wheel" && state.view !== "users" && state.user && !$("#pwDlg").open && !$("#soundDlg").open && !$("#shareDlg").open && !/INPUT|TEXTAREA/.test(document.activeElement.tagName)) { e.preventDefault(); spin(); }
+  if (e.code === "Space" && !e.repeat && state.tab === "wheel" && state.view !== "users" && state.user && !$("#pwDlg").open && !$("#soundDlg").open && !$("#shareDlg").open && !/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) { e.preventDefault(); spin(); }
 });
 
 /* ---------------- Konfetti ---------------- */

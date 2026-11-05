@@ -74,7 +74,7 @@ main{min-width:0;display:flex;flex-direction:column;gap:18px}
 .empty{padding:60px;text-align:center}
 
 /* ---------- Glücksrad ---------- */
-.wheelwrap{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:18px;align-items:start}
+.wheelwrap{display:grid;grid-template-columns:minmax(0,1fr) 410px;gap:18px;align-items:start}
 .wheelcard{padding:26px;display:flex;flex-direction:column;align-items:center;gap:20px;position:relative;overflow:hidden}
 .wheel{position:relative;width:min(560px,100%);aspect-ratio:1;isolation:isolate}
 .wheel::after{content:"";position:absolute;inset:1.5%;border-radius:50%;box-shadow:0 25px 45px rgba(0,0,0,.45);z-index:-1}
@@ -113,6 +113,12 @@ main{min-width:0;display:flex;flex-direction:column;gap:18px}
 .pool .btn{padding:0 8px;border-radius:8px;height:26px}
 .pool .n small.state{margin-left:6px;font-size:11px;color:var(--muted);text-decoration:none;display:inline-block}
 .pool .btn.joker{font-size:12px;padding:0 6px}
+.poolhead{display:flex;gap:8px;padding:0 10px 4px 24px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.poolhead span:first-child{flex:1}
+.poolhead .th-today{width:100px;text-align:center;cursor:help}
+.poolhead .th-count{width:96px;text-align:center}
+.pool select.today{width:100px;flex:none;height:26px;padding:0 4px;font-size:12px;border-radius:8px}
+.pool select.today.on{background:color-mix(in srgb,var(--mid) 22%,transparent);font-weight:700}
 .pool .btn.joker.on{background:color-mix(in srgb,var(--mid) 22%,transparent)}
 .jokerbar{flex-wrap:wrap;margin-top:18px;padding-top:14px;border-top:1px solid var(--stroke)}
 .studs .ctl{flex-basis:100%;display:flex;align-items:center;gap:4px;padding-left:44px}

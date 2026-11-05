@@ -61,8 +61,12 @@ Update: `podman build --format docker -t gluecksrad .` und `systemctl --user res
 - **Joker 🃏** (pro Fach): Jede Lehrkraft der Klasse vergibt Joker im Tab Schülerliste – „Allen +1 Joker“ für das
   gewählte Fach oder − / + je Name. Administrator/innen können zusätzlich allen Schüler/innen aller Klassen in jedem Fach
   einen Joker geben (👥 Benutzerverwaltung). Eingesetzt wird ein Joker über 🃏 in der Namensliste oder direkt im
-  Bewertungsdialog nach der Ziehung: die/der Schüler/in ist für den restlichen Tag nicht im Rad dieses Fachs, die Einträge
+  Bewertungsdialog nach der Ziehung oder in der Spalte „Heute“: die/der Schüler/in ist für den restlichen Tag nicht im Rad dieses Fachs, die Einträge
   bleiben erhalten. Versehentlich eingesetzt → nochmal klicken zum Zurücknehmen.
+- **Pro Tag nur einmal dran** (pro Fach): wer bewertet wurde, ist für den restlichen Tag nicht mehr im Rad dieses Fachs
+  („✓ gezogen“); die Einträge bleiben, am nächsten Tag ist sie/er wieder dabei. „Überspringen“ zählt nicht.
+- **Spalte „Heute“** in der Namensliste: *abwesend* oder *schon dran* (außerhalb des Rads) nimmt jemanden für heute aus
+  dem Rad, ebenso ein 🃏 Joker. Zurück auf „–“ holt die Person heute wieder ins Rad.
 - Verlauf mit Statistik, Hell-/Dunkel-Modus, Tastatur: Leertaste = drehen, Enter = speichern, Pfeiltasten = Bewertung
 
 ## Fehler „attempt to write a readonly database“
