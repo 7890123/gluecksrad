@@ -854,6 +854,8 @@ def route(con, method, parts, body, user):
             raise ApiError(404, "Frage nicht gefunden")
         if method == "DELETE":
             con.execute("DELETE FROM questions WHERE id=?", (q["id"],))
+        elif body.get("archive"):   # von Hand inaktiv setzen -> Archiv
+            con.execute("UPDATE questions SET done_at=? WHERE id=? AND done_at IS NULL", (int(time.time()), q["id"]))
         elif body.get("restore"):   # erledigte Frage wieder hinten anhängen, Zähler auf 0
             sort = con.execute("SELECT COALESCE(MAX(sort),-1)+1 FROM questions WHERE subject_id=?", (subj,)).fetchone()[0]
             con.execute("UPDATE questions SET done_at=NULL, correct=0, sort=? WHERE id=?", (sort, q["id"]))

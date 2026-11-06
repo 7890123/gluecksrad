@@ -14,7 +14,7 @@ const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;"
 const TURBO_SPEED = 5;
 const isTurbo = () => !!state.current && store.get("turbo:" + state.current.subject) === "1";
 const outcomeOf = s => isTurbo() ? (s >= 90 ? "removed" : s >= 30 ? "kept" : "added") : s >= 70 ? "removed" : s >= 50 ? "kept" : "added";
-const Q_OK = 50, Q_DONE = 3;   // Frage zählt ab 50 % als richtig, nach 3x richtig ist sie erledigt
+const Q_OK = 50, Q_DONE = 3;   // Frage zählt ab 50 % als richtig, nach 3x richtig kommt sie ins Archiv (nicht gelöscht)
 // Fragen mit „(2P)“ oder „(3P)“ im Text kommen im normalen Modus dran, alle anderen nur im Turbo
 const isNormalQ = q => /\(\s*[23]\s*P\s*\)/i.test(q.text);
 const OUT_TEXT_STD = { removed: "fliegt aus dem Rad", kept: "bleibt im Rad", added: "kommt ein zusätzliches Mal ins Rad" };
@@ -565,7 +565,7 @@ function setScore(v) {
   box.className = "result o-" + o;
   const q = currentQuestion();
   box.textContent = `${s ? s.name : ""} ${OUT_TEXT[o]}${last ? " – 3 Wochen Pause, danach wieder 1× im Rad" : ""}`
-    + (q ? ` · Frage ${v >= Q_OK ? `richtig (${q.correct + 1}/${Q_DONE})${q.correct + 1 >= Q_DONE ? " – fliegt raus" : ""}` : "nicht richtig"}` : "");
+    + (q ? ` · Frage ${v >= Q_OK ? `richtig (${q.correct + 1}/${Q_DONE})${q.correct + 1 >= Q_DONE ? " – kommt ins Archiv" : ""}` : "nicht richtig"}` : "");
 }
 range.oninput = () => setScore(range.value);
 // Schnell-Notizen: Klick fügt den Text ins Notizfeld ein
@@ -629,7 +629,7 @@ $("#saveBtn").onclick = async () => {
     const c2 = await api("POST", `/classes/${c.id}/subjects/${c.subject}/rate`, { studentId: s.id, score, position: pos, note, day: today(),
       turbo, questionId: q ? q.id : null });
     if (o === "added") flashStudents([s.id]);
-    if (q && score >= Q_OK && q.correct + 1 >= Q_DONE) toast(`Frage 3× richtig beantwortet – raus aus dem Pool`);
+    if (q && score >= Q_OK && q.correct + 1 >= Q_DONE) toast(`Frage 3× richtig beantwortet – ins Archiv verschoben`);
     setCurrent(c2);
   } catch (e) { renderMain(); }
 };
@@ -749,16 +749,16 @@ function renderQuestionsTab() {
     <div class="label">Fragen · ${esc(currentSubject().name)}</div>
     <div class="muted" style="margin:4px 0 10px">Eine Frage pro Zeile – neue werden unten angehängt, sie kommen der Reihe nach dran (▶ = nächste).
       Fragen mit <b>(2P)</b> oder <b>(3P)</b> im Text kommen im normalen Modus, alle anderen nur im ⚡ Turbo.
-      Ab ${Q_OK} % zählt eine Antwort als richtig; nach ${Q_DONE} richtigen Antworten fliegt die Frage aus dem Pool.</div>
+      Ab ${Q_OK} % zählt eine Antwort als richtig; nach ${Q_DONE} richtigen Antworten wird die Frage inaktiv und ins Archiv verschoben (unten, jederzeit reaktivierbar).</div>
     <textarea id="qNew" rows="4" placeholder="Was ist die Hauptstadt von Frankreich?&#10;Nenne drei Laubbäume.&#10;…"></textarea>
     <div class="row" style="margin-top:10px;justify-content:space-between">
-      <span class="muted">${qs.length} Fragen im Pool (${nN} normal, ${qs.length - nN} Turbo)${done.length ? ` · ${done.length} erledigt` : ""}</span>
+      <span class="muted">${qs.length} Fragen im Pool (${nN} normal, ${qs.length - nN} Turbo)${done.length ? ` · ${done.length} im Archiv` : ""}</span>
       <button class="btn primary" id="qAdd">Anhängen</button>
     </div>
     ${qs.length ? `<ol class="qlist">${qs.map(q => `<li class="${q === nextN || q === nextT ? "next" : ""}">${mode(q)}<span class="qt">${esc(q.text)}</span>${dots(q)}
-      <button class="btn ghost icon" data-qedit="${q.id}" title="Bearbeiten">✏️</button><button class="btn ghost icon danger" data-qdel="${q.id}" title="Löschen">✕</button></li>`).join("")}</ol>` : ""}
-    ${done.length ? `<details class="qdone"><summary>Erledigt (${done.length})</summary><ul class="qlist">${done.map(q => `<li><span class="qt">${esc(q.text)}</span>
-      <button class="btn ghost small" data-qrestore="${q.id}" title="Wieder hinten anhängen, Zähler auf 0">↺ zurückholen</button><button class="btn ghost icon danger" data-qdel="${q.id}" title="Löschen">✕</button></li>`).join("")}</ul></details>` : ""}
+      <button class="btn ghost icon" data-qedit="${q.id}" title="Bearbeiten">✏️</button><button class="btn ghost icon" data-qarch="${q.id}" title="Inaktiv setzen (ins Archiv)">📦</button><button class="btn ghost icon danger" data-qdel="${q.id}" title="Löschen">✕</button></li>`).join("")}</ol>` : ""}
+    ${done.length ? `<details class="qdone"><summary>📦 Archiv (${done.length})</summary><ul class="qlist">${done.map(q => `<li>${mode(q)}<span class="qt">${esc(q.text)}</span>${dots(q)}
+      <button class="btn ghost small" data-qrestore="${q.id}" title="Wieder aktiv: hinten anhängen, Zähler auf 0">↺ reaktivieren</button><button class="btn ghost icon danger" data-qdel="${q.id}" title="Löschen">✕</button></li>`).join("")}</ul></details>` : ""}
   </div>`;
   const byId = id => c.questions.find(q => String(q.id) === id);
   $("#qAdd").onclick = async () => {
@@ -775,6 +775,8 @@ function renderQuestionsTab() {
     const q = byId(b.dataset.qdel);
     if (confirm(`Frage löschen?\n\n${q.text}`)) setCurrent(await api("DELETE", subjUrl("/questions/" + q.id)));
   });
+  document.querySelectorAll("[data-qarch]").forEach(b => b.onclick = async () =>
+    setCurrent(await api("PUT", subjUrl("/questions/" + b.dataset.qarch), { archive: true })));
   document.querySelectorAll("[data-qrestore]").forEach(b => b.onclick = async () =>
     setCurrent(await api("PUT", subjUrl("/questions/" + b.dataset.qrestore), { restore: true })));
 }

@@ -441,7 +441,7 @@ html.turbo .wheel .glow{filter:hue-rotate(-40deg) saturate(1.6)}
 .qlist .qt{flex:1;min-width:0}
 .qdots{flex:none;font-size:13px;letter-spacing:2px;color:var(--good)}
 .qdone{margin-top:16px} .qdone summary{cursor:pointer;color:var(--muted)}
-.qdone .qt{color:var(--muted);text-decoration:line-through}
+.qdone .qt{color:var(--muted)}
 .notecell .qline{display:block;font-size:13px;color:var(--muted)}
 html.turbo #scoreRange{background:linear-gradient(90deg,var(--bad) 0%,var(--bad) 29%,var(--mid) 30%,var(--mid) 89%,var(--good) 90%,var(--good) 100%)}
 table.hist tr.absent td{color:var(--bad)} table.hist tr.absent a.stud{color:inherit}
