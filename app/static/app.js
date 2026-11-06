@@ -15,6 +15,8 @@ const TURBO_SPEED = 5;
 const isTurbo = () => !!state.current && store.get("turbo:" + state.current.subject) === "1";
 const outcomeOf = s => isTurbo() ? (s >= 90 ? "removed" : s >= 30 ? "kept" : "added") : s >= 70 ? "removed" : s >= 50 ? "kept" : "added";
 const Q_OK = 50, Q_DONE = 3;   // Frage zählt ab 50 % als richtig, nach 3x richtig ist sie erledigt
+// Fragen mit „(2P)“ oder „(3P)“ im Text kommen im normalen Modus dran, alle anderen nur im Turbo
+const isNormalQ = q => /\(\s*[23]\s*P\s*\)/i.test(q.text);
 const OUT_TEXT_STD = { removed: "fliegt aus dem Rad", kept: "bleibt im Rad", added: "kommt ein zusätzliches Mal ins Rad" };
 const OUT_SHORT_STD = { removed: "raus", kept: "bleibt", added: "+1 im Rad" };
 /* Saison-Themes: alles, was sich je Theme unterscheidet, an einer Stelle */
@@ -205,7 +207,7 @@ function renderWheelTab() {
           <button class="btn turbobtn ${isTurbo() ? "on" : ""}" id="turboBtn" title="Turbo: Fragen aus dem Pool der Reihe nach, Rad und Ton 5× schneller">⚡ Turbo</button>
         </div>
         <div class="hint">${isTurbo()
-          ? `<span><b>⚡ Turbo</b> · ${activeQuestions().length} Fragen</span><span><b class="g">≥ 90 %</b> −1</span><span><b class="m">30–89 %</b> bleibt</span><span><b class="r">&lt; 30 %</b> +1 im Rad</span>`
+          ? `<span><b>⚡ Turbo</b> · ${activeQuestions(true).length} Fragen</span><span><b class="g">≥ 90 %</b> −1</span><span><b class="m">30–89 %</b> bleibt</span><span><b class="r">&lt; 30 %</b> +1 im Rad</span>`
           : `<span><b class="g">≥ 70 %</b> −1 (letzter → 3 Wochen Pause)</span><span><b class="m">50–69 %</b> bleibt</span><span><b class="r">&lt; 50 %</b> +1 im Rad</span>`}<span>Leertaste = drehen</span></div>
       </div>
       <div class="side">
@@ -245,7 +247,7 @@ function renderWheelTab() {
     if (state.spinning || state.pendingRating) return;
     const on = !isTurbo(); store.set("turbo:" + c.subject, on ? "1" : "0");
     applyTurbo(); renderMain(); safe(() => { Sound.unlock(); on ? Sound.pop() : Sound.click(); });
-    toast(on ? (activeQuestions().length ? "⚡ Turbo an – Fragen der Reihe nach" : "⚡ Turbo an – noch keine Fragen im Tab „Fragen“") : "Turbo aus");
+    toast(on ? (activeQuestions(true).length ? "⚡ Turbo an – Fragen der Reihe nach" : "⚡ Turbo an – noch keine Fragen im Tab „Fragen“") : "Turbo aus");
   };
   $("#resetBtn").onclick = async () => {
     const paused = Object.keys(state.current.pauses).length;
@@ -561,7 +563,7 @@ function setScore(v) {
   const box = $("#resultBox"), s = state.drawn;
   const last = s && o === "removed" && state.current.pool.filter(id => id === s.id).length === 1;
   box.className = "result o-" + o;
-  const q = isTurbo() && currentQuestion();
+  const q = currentQuestion();
   box.textContent = `${s ? s.name : ""} ${OUT_TEXT[o]}${last ? " – 3 Wochen Pause, danach wieder 1× im Rad" : ""}`
     + (q ? ` · Frage ${v >= Q_OK ? `richtig (${q.correct + 1}/${Q_DONE})${q.correct + 1 >= Q_DONE ? " – fliegt raus" : ""}` : "nicht richtig"}` : "");
 }
@@ -583,19 +585,23 @@ function openRating(s, pos) {
   state.qSkip = 0; renderQuestionBox();
   setScore(60); if (!dlg.open) dlg.showModal(); $("#saveBtn").focus();
 }
-// Turbo: Fragen der Reihe nach – die nächste nach der zuletzt gestellten; „andere Frage“ springt eine weiter
-function activeQuestions() { return state.current ? state.current.questions.filter(q => !q.done) : []; }
-function currentQuestion() {
-  const qs = activeQuestions(); if (!qs.length) return null;
-  const start = Math.max(0, qs.findIndex(q => q.sort > state.current.turboLast));
-  return qs[(start + (state.qSkip || 0)) % qs.length];
+// Fragen der Reihe nach – die nächste nach der zuletzt gestellten (je Modus getrennt); „andere Frage“ springt eine weiter
+function activeQuestions(turbo = isTurbo()) {
+  return state.current ? state.current.questions.filter(q => !q.done && isNormalQ(q) !== turbo) : [];
+}
+function currentQuestion(turbo = isTurbo()) {
+  const qs = activeQuestions(turbo); if (!qs.length) return null;
+  const last = turbo ? state.current.turboLast : state.current.normalLast;
+  const start = Math.max(0, qs.findIndex(q => q.sort > last));
+  return qs[(start + (turbo === isTurbo() ? state.qSkip || 0 : 0)) % qs.length];
 }
 function renderQuestionBox() {
-  const box = $("#qBox"), qs = activeQuestions(), q = currentQuestion();
-  box.hidden = !isTurbo();
-  if (!isTurbo()) return;
+  const box = $("#qBox"), turbo = isTurbo(), qs = activeQuestions(), q = currentQuestion();
+  box.hidden = !turbo && !q;    // normaler Modus ohne (2P)/(3P)-Fragen: keine Box
+  box.classList.toggle("turbo", turbo);
+  if (box.hidden) return;
   $("#qText").textContent = q ? q.text : "Noch keine Fragen – im Tab „Fragen“ anlegen.";
-  $("#qMeta").textContent = q ? `⚡ Frage ${qs.indexOf(q) + 1} von ${qs.length} · ${"✓".repeat(q.correct)}${"○".repeat(Q_DONE - q.correct)}` : "⚡ Turbo";
+  $("#qMeta").textContent = (turbo ? "⚡ " : "❓ ") + (q ? `Frage ${qs.indexOf(q) + 1} von ${qs.length} · ${"✓".repeat(q.correct)}${"○".repeat(Q_DONE - q.correct)}` : "Turbo");
   $("#qNext").hidden = qs.length < 2;
 }
 $("#qNext").onclick = () => { state.qSkip = (state.qSkip || 0) + 1; renderQuestionBox(); setScore(range.value); Sound.click(); };
@@ -615,7 +621,7 @@ dlg.addEventListener("cancel", e => { e.preventDefault(); closeRating(); });
 $("#saveBtn").onclick = async () => {
   const c = state.current, s = state.drawn; if (!s) return;
   const score = +range.value, o = outcomeOf(score), pos = state.drawnPos, note = $("#noteInput").value.trim();
-  const turbo = isTurbo(), q = turbo ? currentQuestion() : null;
+  const turbo = isTurbo(), q = currentQuestion();
   dlg.close(); state.drawn = null; state.winnerPos = null;
   safe(() => Sound[o]());
   if (o === "removed") safe(() => confetti(180));
@@ -623,7 +629,7 @@ $("#saveBtn").onclick = async () => {
     const c2 = await api("POST", `/classes/${c.id}/subjects/${c.subject}/rate`, { studentId: s.id, score, position: pos, note, day: today(),
       turbo, questionId: q ? q.id : null });
     if (o === "added") flashStudents([s.id]);
-    if (q && score >= Q_OK && q.correct + 1 >= Q_DONE) toast(`⚡ Frage 3× richtig beantwortet – raus aus dem Pool`);
+    if (q && score >= Q_OK && q.correct + 1 >= Q_DONE) toast(`Frage 3× richtig beantwortet – raus aus dem Pool`);
     setCurrent(c2);
   } catch (e) { renderMain(); }
 };
@@ -732,20 +738,24 @@ function renderStudentsTab() {
     setCurrent(await api("PUT", subjUrl(`/students/${b.dataset.sid}/joker`), { delta: +b.dataset.jk })));
 }
 
-/* ---------------- Fragen (Turbo) ---------------- */
+/* ---------------- Fragen ---------------- */
 function renderQuestionsTab() {
-  const c = state.current, qs = activeQuestions(), done = c.questions.filter(q => q.done), next = currentQuestion();
+  const c = state.current, qs = c.questions.filter(q => !q.done), done = c.questions.filter(q => q.done);
+  const nextN = currentQuestion(false), nextT = currentQuestion(true), nN = activeQuestions(false).length;
+  const mode = q => isNormalQ(q) ? `<span class="qmode n" title="Normaler Modus">${q === nextN ? "▶ " : ""}Normal</span>`
+    : `<span class="qmode t" title="Nur im Turbo">${q === nextT ? "▶ " : ""}⚡ Turbo</span>`;
   const dots = q => `<span class="qdots" title="${q.correct} von ${Q_DONE} richtig">${"✓".repeat(q.correct)}${"○".repeat(Math.max(0, Q_DONE - q.correct))}</span>`;
   $("#tab").innerHTML = `<div class="glass card">
     <div class="label">Fragen · ${esc(currentSubject().name)}</div>
-    <div class="muted" style="margin:4px 0 10px">Eine Frage pro Zeile – neue werden unten angehängt. Im ⚡ Turbo kommen sie der Reihe nach dran (▶ = nächste).
+    <div class="muted" style="margin:4px 0 10px">Eine Frage pro Zeile – neue werden unten angehängt, sie kommen der Reihe nach dran (▶ = nächste).
+      Fragen mit <b>(2P)</b> oder <b>(3P)</b> im Text kommen im normalen Modus, alle anderen nur im ⚡ Turbo.
       Ab ${Q_OK} % zählt eine Antwort als richtig; nach ${Q_DONE} richtigen Antworten fliegt die Frage aus dem Pool.</div>
     <textarea id="qNew" rows="4" placeholder="Was ist die Hauptstadt von Frankreich?&#10;Nenne drei Laubbäume.&#10;…"></textarea>
     <div class="row" style="margin-top:10px;justify-content:space-between">
-      <span class="muted">${qs.length} Fragen im Pool${done.length ? ` · ${done.length} erledigt` : ""}</span>
+      <span class="muted">${qs.length} Fragen im Pool (${nN} normal, ${qs.length - nN} Turbo)${done.length ? ` · ${done.length} erledigt` : ""}</span>
       <button class="btn primary" id="qAdd">Anhängen</button>
     </div>
-    ${qs.length ? `<ol class="qlist">${qs.map(q => `<li class="${q === next ? "next" : ""}"><span class="qn">${q === next ? "▶" : ""}</span><span class="qt">${esc(q.text)}</span>${dots(q)}
+    ${qs.length ? `<ol class="qlist">${qs.map(q => `<li class="${q === nextN || q === nextT ? "next" : ""}">${mode(q)}<span class="qt">${esc(q.text)}</span>${dots(q)}
       <button class="btn ghost icon" data-qedit="${q.id}" title="Bearbeiten">✏️</button><button class="btn ghost icon danger" data-qdel="${q.id}" title="Löschen">✕</button></li>`).join("")}</ol>` : ""}
     ${done.length ? `<details class="qdone"><summary>Erledigt (${done.length})</summary><ul class="qlist">${done.map(q => `<li><span class="qt">${esc(q.text)}</span>
       <button class="btn ghost small" data-qrestore="${q.id}" title="Wieder hinten anhängen, Zähler auf 0">↺ zurückholen</button><button class="btn ghost icon danger" data-qdel="${q.id}" title="Löschen">✕</button></li>`).join("")}</ul></details>` : ""}
@@ -776,6 +786,8 @@ function renderHistoryTab() {
   const fmt = ts => new Date(ts * 1000).toLocaleString("de-AT", { dateStyle: "short", timeStyle: "short" });
   const avg = rates.length ? Math.round(rates.reduce((s, h) => s + h.score, 0) / rates.length) : "–";
   const cnt = o => rates.filter(h => h.outcome === o).length;
+  const absents = c.history.filter(h => h.type === "absent" && (!filter || h.studentId === filter));
+  const absDay = d => new Date(d + "T12:00").toLocaleDateString("de-AT", { weekday: "short", day: "2-digit", month: "2-digit", year: "numeric" });
   const shown = c.history.filter(h => !filter || (h.type !== "reset" && h.studentId === filter));
   const team = c.members && c.members.length > 0;
   const rows = shown.map(h => h.type === "reset"
@@ -783,10 +795,13 @@ function renderHistoryTab() {
     : h.type === "joker"
     ? `<tr><td class="nowrap">${fmt(h.ts)}${team && h.by ? `<div class="muted small">${esc(h.by)}</div>` : ""}</td>
         <td><a href="#" class="stud" data-stud="${h.studentId}">${esc(h.name)}</a></td><td colspan="3" class="muted">🃏 Joker eingesetzt – an dem Tag nicht im Rad dieses Fachs</td></tr>`
+    : h.type === "absent"
+    ? `<tr class="absent"><td class="nowrap">${fmt(h.ts)}${team && h.by ? `<div class="muted small">${esc(h.by)}</div>` : ""}</td>
+        <td><a href="#" class="stud" data-stud="${h.studentId}">${esc(h.name)}</a></td><td colspan="3">🚫 abwesend${h.note ? ` am ${absDay(h.note)}` : ""}</td></tr>`
     : `<tr><td class="nowrap">${fmt(h.ts)}${team && h.by ? `<div class="muted small">${esc(h.by)}</div>` : ""}</td>
         <td><a href="#" class="stud" data-stud="${h.studentId}">${esc(h.name)}</a></td><td class="nowrap">${h.score} %</td>
         <td><span class="pill o-${h.outcome}">${OUT_SHORT[h.outcome]}</span></td>
-        <td class="notecell"><span class="notetext">${h.question ? `<span class="qline">⚡ ${esc(h.question)}</span>` : ""}${h.note ? esc(h.note) : h.question ? "" : '<span class="muted">–</span>'}</span>
+        <td class="notecell"><span class="notetext">${h.question ? `<span class="qline">❓ ${esc(h.question)}</span>` : ""}${h.note ? esc(h.note) : h.question ? "" : '<span class="muted">–</span>'}</span>
           <button class="btn ghost icon small" data-note="${h.id}" title="Notiz bearbeiten">✏️</button></td></tr>`).join("");
   const fname = filter ? (c.students.find(s => s.id === filter) || {}).name : "";
   $("#tab").innerHTML = `<div class="glass card">
@@ -796,6 +811,7 @@ function renderHistoryTab() {
       <div class="stat"><span class="muted">Raus</span><b style="color:var(--good)">${cnt("removed")}</b></div>
       <div class="stat"><span class="muted">Bleibt</span><b style="color:var(--mid)">${cnt("kept")}</b></div>
       <div class="stat"><span class="muted">+1 im Rad</span><b style="color:var(--bad)">${cnt("added")}</b></div>
+      <div class="stat"><span class="muted">Abwesend</span><b>${absents.length}</b></div>
     </div>
     ${filter ? `<div class="filterbar">Nur <b>${esc(fname || "?")}</b> <button class="btn ghost small" id="clearFilter">✕ alle anzeigen</button></div>` : ""}
     ${shown.length ? `<div class="tablewrap"><table class="hist"><tr><th>Zeit</th><th>Name</th><th>Bewertung</th><th>Folge</th><th>Notiz</th></tr>${rows}</table></div>

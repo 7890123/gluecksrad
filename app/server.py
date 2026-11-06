@@ -29,7 +29,7 @@ DAY_OUT_REASONS = ("drawn", "absent", "other")   # heute dran gewesen · abwesen
 PAUSE_DAYS = 21
 TURBO_REMOVE_AT = 90   # Turbo: >= 90 % -> ein Eintrag weniger
 TURBO_ADD_BELOW = 30   # Turbo: < 30 % -> zusätzlicher Eintrag
-QUESTION_OK_AT = 50    # Turbo: ab 50 % zählt die Frage als richtig beantwortet
+QUESTION_OK_AT = 50    # ab 50 % zählt die Frage als richtig beantwortet
 QUESTION_DONE = 3      # nach 3 richtigen Antworten fliegt die Frage aus dem Pool  # letzter Eintrag mit >= 70 % entfernt -> 3 Wochen Pause, danach wieder 1x im Rad
 
 LOCK = threading.Lock()
@@ -207,6 +207,8 @@ def init_db():
             fcols = [r[1] for r in con.execute("PRAGMA table_info(subjects)")]
             if "turbo_last" not in fcols:
                 con.execute("ALTER TABLE subjects ADD COLUMN turbo_last INTEGER")   # sort der zuletzt gestellten Frage
+            if "normal_last" not in fcols:
+                con.execute("ALTER TABLE subjects ADD COLUMN normal_last INTEGER")  # dasselbe für (2P)/(3P)-Fragen im normalen Modus
             migrate_v1(con)
             migrate_subjects(con)
             migrate_jokers(con)
@@ -368,10 +370,11 @@ def class_obj(con, cid, subj=None):
         "SELECT student_id, day, reason FROM subject_day_out WHERE subject_id=?", (subj,))}
     questions = [{"id": r["id"], "text": r["text"], "sort": r["sort"], "correct": r["correct"], "done": r["done_at"]}
                  for r in con.execute("SELECT * FROM questions WHERE subject_id=? ORDER BY sort", (subj,))]
-    turbo_last = con.execute("SELECT turbo_last FROM subjects WHERE id=?", (subj,)).fetchone()[0]
+    turbo_last, normal_last = con.execute("SELECT turbo_last, normal_last FROM subjects WHERE id=?", (subj,)).fetchone()
     return {"id": c["id"], "name": c["name"], "students": students, "subjects": subjects,
             "subject": subj, "pool": read_pool(con, subj), "pauses": pauses, "dayOut": day_out, "history": history,
-            "questions": questions, "turboLast": -1 if turbo_last is None else turbo_last}
+            "questions": questions, "turboLast": -1 if turbo_last is None else turbo_last,
+            "normalLast": -1 if normal_last is None else normal_last}
 
 
 def get_student(con, cid, sid):
@@ -866,6 +869,11 @@ def route(con, method, parts, body, user):
             con.execute("INSERT OR REPLACE INTO subject_day_out VALUES (?,?,?,?)", (subj, s["id"], day, reason))
         else:
             con.execute("DELETE FROM subject_day_out WHERE subject_id=? AND student_id=? AND day=?", (subj, s["id"], day))
+        # Abwesenheit im Verlauf protokollieren (Tag steht in note); Umstellen am selben Tag nimmt den Eintrag zurück
+        con.execute("DELETE FROM history WHERE subject_id=? AND student_id=? AND type='absent' AND note=?", (subj, s["id"], day))
+        if reason == "absent":
+            con.execute("INSERT INTO history (class_id, subject_id, ts, type, student_id, name, note, rated_by)"
+                        " VALUES (?,?,?,'absent',?,?,?,?)", (cid, subj, int(time.time()), s["id"], s["name"], day, user["username"]))
         return class_obj(con, cid, subj)
 
     if len(rest) == 2 and rest[0] == "students":
@@ -956,12 +964,13 @@ def route(con, method, parts, body, user):
             insert_random(pool, s["id"])
         write_pool(con, subj, pool)
         question = None
-        if turbo and body.get("questionId") is not None:
+        if body.get("questionId") is not None:
             q = con.execute("SELECT * FROM questions WHERE id=? AND subject_id=? AND done_at IS NULL",
                             (body.get("questionId"), subj)).fetchone()
             if q:
                 question = q["text"]
-                con.execute("UPDATE subjects SET turbo_last=? WHERE id=?", (q["sort"], subj))   # nächstes Mal die folgende Frage
+                con.execute(f"UPDATE subjects SET {'turbo_last' if turbo else 'normal_last'}=? WHERE id=?",
+                            (q["sort"], subj))   # nächstes Mal die folgende Frage
                 if score >= QUESTION_OK_AT:
                     con.execute("UPDATE questions SET correct=correct+1 WHERE id=?", (q["id"],))
                     if q["correct"] + 1 >= QUESTION_DONE:
