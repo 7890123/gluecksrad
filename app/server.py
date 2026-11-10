@@ -209,6 +209,8 @@ def init_db():
                 con.execute("ALTER TABLE subjects ADD COLUMN turbo_last INTEGER")   # sort der zuletzt gestellten Frage
             if "normal_last" not in fcols:
                 con.execute("ALTER TABLE subjects ADD COLUMN normal_last INTEGER")  # dasselbe für (2P)/(3P)-Fragen im normalen Modus
+            if "q_random" not in fcols:
+                con.execute("ALTER TABLE subjects ADD COLUMN q_random INTEGER NOT NULL DEFAULT 0")  # Fragen zufällig statt der Reihe nach
             migrate_v1(con)
             migrate_subjects(con)
             migrate_jokers(con)
@@ -370,11 +372,12 @@ def class_obj(con, cid, subj=None):
         "SELECT student_id, day, reason FROM subject_day_out WHERE subject_id=?", (subj,))}
     questions = [{"id": r["id"], "text": r["text"], "sort": r["sort"], "correct": r["correct"], "done": r["done_at"]}
                  for r in con.execute("SELECT * FROM questions WHERE subject_id=? ORDER BY sort", (subj,))]
-    turbo_last, normal_last = con.execute("SELECT turbo_last, normal_last FROM subjects WHERE id=?", (subj,)).fetchone()
+    turbo_last, normal_last, q_random = con.execute(
+        "SELECT turbo_last, normal_last, q_random FROM subjects WHERE id=?", (subj,)).fetchone()
     return {"id": c["id"], "name": c["name"], "students": students, "subjects": subjects,
             "subject": subj, "pool": read_pool(con, subj), "pauses": pauses, "dayOut": day_out, "history": history,
             "questions": questions, "turboLast": -1 if turbo_last is None else turbo_last,
-            "normalLast": -1 if normal_last is None else normal_last}
+            "normalLast": -1 if normal_last is None else normal_last, "qRandom": bool(q_random)}
 
 
 def get_student(con, cid, sid):
@@ -846,6 +849,10 @@ def route(con, method, parts, body, user):
             if t:
                 con.execute("INSERT INTO questions (subject_id, text, sort) VALUES (?,?,?)", (subj, t, sort))
                 sort += 1
+        return class_obj(con, cid, subj)
+
+    if rest == ["subject", "qorder"] and method == "PUT":   # Reihenfolge: der Reihe nach / zufällig
+        con.execute("UPDATE subjects SET q_random=? WHERE id=?", (1 if body.get("random") else 0, need_subject()))
         return class_obj(con, cid, subj)
 
     if len(rest) == 3 and rest[:2] == ["subject", "questions"] and method in ("PUT", "DELETE"):

@@ -14,6 +14,7 @@ const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;"
 const TURBO_SPEED = 5;
 const isTurbo = () => !!state.current && store.get("turbo:" + state.current.subject) === "1";
 const outcomeOf = s => isTurbo() ? (s >= 90 ? "removed" : s >= 30 ? "kept" : "added") : s >= 70 ? "removed" : s >= 50 ? "kept" : "added";
+const Q_DELAY = 10;            // Sekunden nach dem Ziehen, bis die Frage erscheint
 const Q_OK = 50, Q_DONE = 3;   // Frage zählt ab 50 % als richtig, nach 3x richtig kommt sie ins Archiv (nicht gelöscht)
 // Fragen mit „(2P)“ oder „(3P)“ im Text kommen im normalen Modus dran, alle anderen nur im Turbo
 const isNormalQ = q => /\(\s*[23]\s*P\s*\)/i.test(q.text);
@@ -563,7 +564,7 @@ function setScore(v) {
   const box = $("#resultBox"), s = state.drawn;
   const last = s && o === "removed" && state.current.pool.filter(id => id === s.id).length === 1;
   box.className = "result o-" + o;
-  const q = currentQuestion();
+  const q = !state.qRevealAt && currentQuestion();   // erst zählen, wenn die Frage sichtbar ist
   box.textContent = `${s ? s.name : ""} ${OUT_TEXT[o]}${last ? " – 3 Wochen Pause, danach wieder 1× im Rad" : ""}`
     + (q ? ` · Frage ${v >= Q_OK ? `richtig (${q.correct + 1}/${Q_DONE})${q.correct + 1 >= Q_DONE ? " – kommt ins Archiv" : ""}` : "nicht richtig"}` : "");
 }
@@ -582,7 +583,7 @@ function openRating(s, pos) {
   const av = $("#winAvatar"); av.textContent = initials(s.name); av.style.background = `linear-gradient(135deg, ${colorFor(s.id, 62)}, ${colorFor(s.id, 42)})`;
   const live = state.current.students.find(x => x.id === s.id) || s, jb = $("#jokerBtn");
   jb.hidden = !live.jokers; jb.textContent = `🃏 Joker (${live.jokers})`;
-  state.qSkip = 0; renderQuestionBox();
+  state.qSkip = 0; state.qRand = null; startQuestionDelay(); renderQuestionBox();
   setScore(60); if (!dlg.open) dlg.showModal(); $("#saveBtn").focus();
 }
 // YAML-Einzeiler in Fragen ({ a: { b: [ x ] } }) als eingerückten Block darstellen; der Text bleibt unverändert gespeichert
@@ -643,25 +644,51 @@ function fmtQuestion(text) {
   }
   return html + esc(text.slice(pos).trimStart());
 }
-// Fragen der Reihe nach – die nächste nach der zuletzt gestellten (je Modus getrennt); „andere Frage“ springt eine weiter
+// Fragen der Reihe nach – die nächste nach der zuletzt gestellten (je Modus getrennt) – oder zufällig (pro Fach umschaltbar);
+// „andere Frage“ springt eine weiter
 function activeQuestions(turbo = isTurbo()) {
   return state.current ? state.current.questions.filter(q => !q.done && isNormalQ(q) !== turbo) : [];
 }
+function randomOrder(qs, last) {
+  // pro Dialog einmal mischen (openRating setzt state.qRand zurück); die zuletzt gestellte Frage nicht gleich wieder
+  const key = qs.map(q => q.id).join(",");
+  if (state.qRand && state.qRand.key === key) return state.qRand.order;
+  const order = qs.slice();
+  for (let i = order.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [order[i], order[j]] = [order[j], order[i]]; }
+  if (order.length > 1 && order[0].sort === last) order.push(order.shift());
+  state.qRand = { key, order };
+  return order;
+}
 function currentQuestion(turbo = isTurbo()) {
   const qs = activeQuestions(turbo); if (!qs.length) return null;
-  const last = turbo ? state.current.turboLast : state.current.normalLast;
+  const last = turbo ? state.current.turboLast : state.current.normalLast, skip = turbo === isTurbo() ? state.qSkip || 0 : 0;
+  if (state.current.qRandom) return turbo === isTurbo() ? randomOrder(qs, last)[skip % qs.length] : null;
   const start = Math.max(0, qs.findIndex(q => q.sort > last));
-  return qs[(start + (turbo === isTurbo() ? state.qSkip || 0 : 0)) % qs.length];
+  return qs[(start + skip) % qs.length];
 }
 function renderQuestionBox() {
   const box = $("#qBox"), turbo = isTurbo(), qs = activeQuestions(), q = currentQuestion();
   box.hidden = !turbo && !q;    // normaler Modus ohne (2P)/(3P)-Fragen: keine Box
   box.classList.toggle("turbo", turbo);
   if (box.hidden) return;
+  const wait = q ? Math.ceil((state.qRevealAt - Date.now()) / 1000) : 0;
+  box.classList.toggle("waiting", wait > 0);
+  $("#qWait").hidden = wait <= 0; $("#qText").hidden = wait > 0; $("#qNext").hidden = wait > 0 || qs.length < 2;
+  if (wait > 0) $("#qWaitN").textContent = wait;
   $("#qText").innerHTML = q ? fmtQuestion(q.text) : "Noch keine Fragen – im Tab „Fragen“ anlegen.";
-  $("#qMeta").textContent = (turbo ? "⚡ " : "❓ ") + (q ? `Frage ${qs.indexOf(q) + 1} von ${qs.length} · ${"✓".repeat(q.correct)}${"○".repeat(Q_DONE - q.correct)}` : "Turbo");
-  $("#qNext").hidden = qs.length < 2;
+  $("#qMeta").textContent = (turbo ? "⚡ " : "❓ ") + (q ? `${state.current.qRandom ? "Zufallsfrage" : `Frage ${qs.indexOf(q) + 1} von ${qs.length}`} · ${"✓".repeat(q.correct)}${"○".repeat(Q_DONE - q.correct)}` : "Turbo");
 }
+// Frage erst Q_DELAY Sekunden nach dem Ziehen zeigen (Countdown, vorzeitig per Klick)
+function startQuestionDelay() {
+  clearInterval(state.qTimer);
+  state.qRevealAt = Date.now() + Q_DELAY * 1000;
+  state.qTimer = setInterval(() => {
+    if (!dlg.open || Date.now() >= state.qRevealAt) { clearInterval(state.qTimer); if (dlg.open) revealQuestion(); }
+    else renderQuestionBox();
+  }, 250);
+}
+function revealQuestion() { clearInterval(state.qTimer); state.qRevealAt = 0; renderQuestionBox(); setScore(range.value); if (!$("#qBox").hidden) safe(() => Sound.pop()); }
+$("#qShow").onclick = revealQuestion;
 $("#qNext").onclick = () => { state.qSkip = (state.qSkip || 0) + 1; renderQuestionBox(); setScore(range.value); Sound.click(); };
 function applyTurbo() {
   const on = isTurbo();
@@ -673,13 +700,13 @@ $("#jokerBtn").onclick = async () => {
   closeRating();
   try { await useJoker(s, false); } catch (e) { renderMain(); }
 };
-function closeRating() { if (dlg.open) dlg.close(); state.drawn = null; state.winnerPos = null; drawWheel(); setControls(); }
+function closeRating() { clearInterval(state.qTimer); if (dlg.open) dlg.close(); state.drawn = null; state.winnerPos = null; drawWheel(); setControls(); }
 $("#skipBtn").onclick = closeRating;
 dlg.addEventListener("cancel", e => { e.preventDefault(); closeRating(); });
 $("#saveBtn").onclick = async () => {
   const c = state.current, s = state.drawn; if (!s) return;
   const score = +range.value, o = outcomeOf(score), pos = state.drawnPos, note = $("#noteInput").value.trim();
-  const turbo = isTurbo(), q = currentQuestion();
+  const turbo = isTurbo(), q = state.qRevealAt ? null : currentQuestion();   // vor dem Aufdecken gespeichert: Frage zählt nicht
   dlg.close(); state.drawn = null; state.winnerPos = null;
   safe(() => Sound[o]());
   if (o === "removed") safe(() => confetti(180));
@@ -799,13 +826,14 @@ function renderStudentsTab() {
 /* ---------------- Fragen ---------------- */
 function renderQuestionsTab() {
   const c = state.current, qs = c.questions.filter(q => !q.done), done = c.questions.filter(q => q.done);
-  const nextN = currentQuestion(false), nextT = currentQuestion(true), nN = activeQuestions(false).length;
+  const nextN = !c.qRandom && currentQuestion(false), nextT = !c.qRandom && currentQuestion(true), nN = activeQuestions(false).length;
   const mode = q => isNormalQ(q) ? `<span class="qmode n" title="Normaler Modus">${q === nextN ? "▶ " : ""}Normal</span>`
     : `<span class="qmode t" title="Nur im Turbo">${q === nextT ? "▶ " : ""}⚡ Turbo</span>`;
   const dots = q => `<span class="qdots" title="${q.correct} von ${Q_DONE} richtig">${"✓".repeat(q.correct)}${"○".repeat(Math.max(0, Q_DONE - q.correct))}</span>`;
   $("#tab").innerHTML = `<div class="glass card">
-    <div class="label">Fragen · ${esc(currentSubject().name)}</div>
-    <div class="muted" style="margin:4px 0 10px">Eine Frage pro Zeile – neue werden unten angehängt, sie kommen der Reihe nach dran (▶ = nächste).
+    <div class="row" style="justify-content:space-between;flex-wrap:wrap"><div class="label">Fragen · ${esc(currentSubject().name)}</div>
+      <div class="seg qorder" title="Gilt für dieses Fach, für alle Lehrkräfte der Klasse"><button data-qorder="0" class="${c.qRandom ? "" : "on"}">↓ der Reihe nach</button><button data-qorder="1" class="${c.qRandom ? "on" : ""}">🎲 zufällig</button></div></div>
+    <div class="muted" style="margin:4px 0 10px">Eine Frage pro Zeile – neue werden unten angehängt, sie kommen ${c.qRandom ? "in zufälliger Reihenfolge" : "der Reihe nach (▶ = nächste)"} dran, im Dialog erst ${Q_DELAY} s nach dem Ziehen.
       Fragen mit <b>(2P)</b> oder <b>(3P)</b> im Text kommen im normalen Modus, alle anderen nur im ⚡ Turbo.
       Ab ${Q_OK} % zählt eine Antwort als richtig; nach ${Q_DONE} richtigen Antworten wird die Frage inaktiv und ins Archiv verschoben (unten, jederzeit reaktivierbar).</div>
     <textarea id="qNew" rows="4" placeholder="Was ist die Hauptstadt von Frankreich?&#10;Nenne drei Laubbäume.&#10;…"></textarea>
@@ -820,6 +848,11 @@ function renderQuestionsTab() {
       <button class="btn ghost small" data-qrestore="${q.id}" title="Wieder aktiv: hinten anhängen, Zähler auf 0">↺ reaktivieren</button><button class="btn ghost icon danger" data-qdel="${q.id}" title="Löschen">✕</button></li>`).join("")}</ul></details>` : ""}
   </div>`;
   const byId = id => c.questions.find(q => String(q.id) === id);
+  document.querySelectorAll("[data-qorder]").forEach(b => b.onclick = async () => {
+    const random = b.dataset.qorder === "1"; if (random === c.qRandom) return;
+    setCurrent(await api("PUT", subjUrl("/qorder"), { random })); Sound.click();
+    toast(random ? "🎲 Fragen in zufälliger Reihenfolge" : "Fragen der Reihe nach");
+  });
   $("#qCopy").disabled = !c.questions.length;
   $("#qCopy").onclick = async () => {
     const all = qs.concat(done), text = all.map(q => q.text.replace(/\s*\n\s*/g, " ")).join("\n");

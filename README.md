@@ -73,6 +73,9 @@ Update: `podman build --format docker -t gluecksrad .` und `systemctl --user res
   „andere Frage ↻“ springt eine weiter. Bewertung im Turbo: **≥ 90 %** −1 Eintrag, **30–89 %** bleibt, **< 30 %** +1.
   Ab 50 % zählt die Frage als richtig; nach 3 richtigen Antworten wird sie inaktiv und kommt ins **Archiv**
   (wird nicht gelöscht, im Tab „Fragen“ unter „📦 Archiv“ jederzeit reaktivierbar).
+  Im Bewertungsdialog erscheint die Frage erst **10 Sekunden nach dem Ziehen** (Countdown, „jetzt zeigen“ deckt sie
+  sofort auf; wird vorher gespeichert, zählt die Frage nicht). Reihenfolge pro Fach umschaltbar: **der Reihe nach** oder
+  **🎲 zufällig** (die zuletzt gestellte Frage kommt nicht gleich wieder).
   **📋 Alle kopieren** kopiert alle Fragen des Fachs (Pool, dann Archiv) im Eingabeformat – eine Zeile pro Frage.
   YAML-Einzeiler in Fragen (z. B. `services: { plex: { image: …, volumes: [ … ] } }`) werden als eingerückter
   YAML-Block angezeigt; gespeichert und kopiert wird der Originaltext.
