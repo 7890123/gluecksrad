@@ -585,6 +585,64 @@ function openRating(s, pos) {
   state.qSkip = 0; renderQuestionBox();
   setScore(60); if (!dlg.open) dlg.showModal(); $("#saveBtn").focus();
 }
+// YAML-Einzeiler in Fragen ({ a: { b: [ x ] } }) als eingerückten Block darstellen; der Text bleibt unverändert gespeichert
+function parseFlowYaml(src) {
+  let i = 0;
+  const ws = () => { while (/\s/.test(src[i] || "")) i++; };
+  const quoted = () => { const q = src[i++]; let out = q; while (i < src.length && src[i] !== q) out += src[i++]; if (src[i] !== q) throw 0; i++; return out + q; };
+  const plain = stop => { let out = ""; while (i < src.length && !stop()) out += src[i++]; out = out.trim(); if (!out) throw 0; return out; };
+  function value() {
+    ws();
+    if (src[i] === "{") {
+      i++; const m = []; ws();
+      while (src[i] !== "}") {
+        ws(); const k = /["']/.test(src[i]) ? quoted() : plain(() => src[i] === ":" && /[\s{["']/.test(src[i + 1] || " ") || /[,{}[\]]/.test(src[i]));
+        ws(); if (src[i++] !== ":") throw 0;
+        m.push([k, value()]); ws();
+        if (src[i] === ",") i++; else if (src[i] !== "}") throw 0;
+        ws();
+      }
+      i++; return { map: m };
+    }
+    if (src[i] === "[") {
+      i++; const l = []; ws();
+      while (src[i] !== "]") {
+        l.push(value()); ws();
+        if (src[i] === ",") i++; else if (src[i] !== "]") throw 0;
+        ws();
+      }
+      i++; return { seq: l };
+    }
+    return /["']/.test(src[i]) ? quoted() : plain(() => /[,{}[\]]/.test(src[i]));
+  }
+  const v = value(); return { v, end: i };
+}
+function dumpYaml(v, ind = "") {
+  if (typeof v === "string") return v;
+  if (v.map) return v.map.length ? v.map.map(([k, x]) => typeof x === "string" || !(x.map || x.seq).length
+    ? `${ind}${k}: ${typeof x === "string" ? x : x.map ? "{}" : "[]"}` : `${ind}${k}:\n${dumpYaml(x, ind + "  ")}`).join("\n") : ind + "{}";
+  return v.seq.length ? v.seq.map(x => typeof x === "string" ? `${ind}- ${x}`
+    : `${ind}- ${dumpYaml(x, ind + "  ").trimStart()}`).join("\n") : ind + "[]";
+}
+function fmtQuestion(text) {
+  let html = "", pos = 0;
+  for (let k = text.indexOf("{"); k >= 0; k = text.indexOf("{", k + 1)) {
+    if (k < pos) continue;
+    let r; try { r = parseFlowYaml(text.slice(k)); } catch (e) { continue; }
+    if (!r.v.map || !r.v.map.length || !/[{[]/.test(text.slice(k + 1, k + r.end))) continue;   // nur verschachtelte Einzeiler
+    let a = k, b = k + r.end, v = r.v;
+    // führende Schlüssel („services: { … }“) dazunehmen, wenn sie direkt nach einem Anführungszeichen oder am Anfang stehen
+    const lead = text.slice(pos, k).match(/(^|["'„“])\s*((?:[\w.$-]+:\s*)+)$/);
+    if (lead) {
+      a = k - lead[2].length;
+      v = lead[2].trim().split(/:\s*/).filter(Boolean).reduceRight((x, key) => ({ map: [[key, x]] }), v);
+    }
+    if (/["'„“]/.test(text[a - 1] || "") && /["'“”]/.test(text[b] || "")) { a--; b++; }   // umschließende Anführungszeichen weglassen
+    html += esc(text.slice(pos, a).trimEnd()) + `<pre class="yaml">${esc(dumpYaml(v))}</pre>`;
+    pos = b; k = b - 1;
+  }
+  return html + esc(text.slice(pos).trimStart());
+}
 // Fragen der Reihe nach – die nächste nach der zuletzt gestellten (je Modus getrennt); „andere Frage“ springt eine weiter
 function activeQuestions(turbo = isTurbo()) {
   return state.current ? state.current.questions.filter(q => !q.done && isNormalQ(q) !== turbo) : [];
@@ -600,7 +658,7 @@ function renderQuestionBox() {
   box.hidden = !turbo && !q;    // normaler Modus ohne (2P)/(3P)-Fragen: keine Box
   box.classList.toggle("turbo", turbo);
   if (box.hidden) return;
-  $("#qText").textContent = q ? q.text : "Noch keine Fragen – im Tab „Fragen“ anlegen.";
+  $("#qText").innerHTML = q ? fmtQuestion(q.text) : "Noch keine Fragen – im Tab „Fragen“ anlegen.";
   $("#qMeta").textContent = (turbo ? "⚡ " : "❓ ") + (q ? `Frage ${qs.indexOf(q) + 1} von ${qs.length} · ${"✓".repeat(q.correct)}${"○".repeat(Q_DONE - q.correct)}` : "Turbo");
   $("#qNext").hidden = qs.length < 2;
 }
@@ -756,9 +814,9 @@ function renderQuestionsTab() {
       <span class="row"><button class="btn" id="qCopy" title="Alle Fragen dieses Fachs (Pool, dann Archiv) kopieren – eine Zeile pro Frage, z. B. zum Einfügen in einem anderen Fach">📋 Alle kopieren</button>
         <button class="btn primary" id="qAdd">Anhängen</button></span>
     </div>
-    ${qs.length ? `<ol class="qlist">${qs.map(q => `<li class="${q === nextN || q === nextT ? "next" : ""}">${mode(q)}<span class="qt">${esc(q.text)}</span>${dots(q)}
+    ${qs.length ? `<ol class="qlist">${qs.map(q => `<li class="${q === nextN || q === nextT ? "next" : ""}">${mode(q)}<span class="qt">${fmtQuestion(q.text)}</span>${dots(q)}
       <button class="btn ghost icon" data-qedit="${q.id}" title="Bearbeiten">✏️</button><button class="btn ghost icon" data-qarch="${q.id}" title="Inaktiv setzen (ins Archiv)">📦</button><button class="btn ghost icon danger" data-qdel="${q.id}" title="Löschen">✕</button></li>`).join("")}</ol>` : ""}
-    ${done.length ? `<details class="qdone"><summary>📦 Archiv (${done.length})</summary><ul class="qlist">${done.map(q => `<li>${mode(q)}<span class="qt">${esc(q.text)}</span>${dots(q)}
+    ${done.length ? `<details class="qdone"><summary>📦 Archiv (${done.length})</summary><ul class="qlist">${done.map(q => `<li>${mode(q)}<span class="qt">${fmtQuestion(q.text)}</span>${dots(q)}
       <button class="btn ghost small" data-qrestore="${q.id}" title="Wieder aktiv: hinten anhängen, Zähler auf 0">↺ reaktivieren</button><button class="btn ghost icon danger" data-qdel="${q.id}" title="Löschen">✕</button></li>`).join("")}</ul></details>` : ""}
   </div>`;
   const byId = id => c.questions.find(q => String(q.id) === id);

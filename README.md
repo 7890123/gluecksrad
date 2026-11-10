@@ -74,6 +74,8 @@ Update: `podman build --format docker -t gluecksrad .` und `systemctl --user res
   Ab 50 % zählt die Frage als richtig; nach 3 richtigen Antworten wird sie inaktiv und kommt ins **Archiv**
   (wird nicht gelöscht, im Tab „Fragen“ unter „📦 Archiv“ jederzeit reaktivierbar).
   **📋 Alle kopieren** kopiert alle Fragen des Fachs (Pool, dann Archiv) im Eingabeformat – eine Zeile pro Frage.
+  YAML-Einzeiler in Fragen (z. B. `services: { plex: { image: …, volumes: [ … ] } }`) werden als eingerückter
+  YAML-Block angezeigt; gespeichert und kopiert wird der Originaltext.
   „Pro Tag nur einmal dran“ gilt auch im Turbo.
 - **Fragen im normalen Modus:** Fragen mit **(2P)** oder **(3P)** im Text kommen im normalen Modus dran (ebenfalls der
   Reihe nach, eigener Zähler), alle anderen nur im Turbo. Ohne solche Fragen erscheint im normalen Modus keine Frage.

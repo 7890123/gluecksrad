@@ -445,3 +445,6 @@ html.turbo .wheel .glow{filter:hue-rotate(-40deg) saturate(1.6)}
 .notecell .qline{display:block;font-size:13px;color:var(--muted)}
 html.turbo #scoreRange{background:linear-gradient(90deg,var(--bad) 0%,var(--bad) 29%,var(--mid) 30%,var(--mid) 89%,var(--good) 90%,var(--good) 100%)}
 table.hist tr.absent td{color:var(--bad)} table.hist tr.absent a.stud{color:inherit}
+.qtext pre.yaml,.qlist pre.yaml{font:600 15px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;text-align:left;white-space:pre;
+  overflow-x:auto;margin:10px 0;padding:10px 14px;border-radius:12px;background:color-mix(in srgb,var(--bg) 70%,transparent);border:1px solid var(--stroke)}
+.qlist pre.yaml{font-size:13px;margin:6px 0;padding:6px 10px}
