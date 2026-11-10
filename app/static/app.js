@@ -753,7 +753,8 @@ function renderQuestionsTab() {
     <textarea id="qNew" rows="4" placeholder="Was ist die Hauptstadt von Frankreich?&#10;Nenne drei Laubbäume.&#10;…"></textarea>
     <div class="row" style="margin-top:10px;justify-content:space-between">
       <span class="muted">${qs.length} Fragen im Pool (${nN} normal, ${qs.length - nN} Turbo)${done.length ? ` · ${done.length} im Archiv` : ""}</span>
-      <button class="btn primary" id="qAdd">Anhängen</button>
+      <span class="row"><button class="btn" id="qCopy" title="Alle Fragen dieses Fachs (Pool, dann Archiv) kopieren – eine Zeile pro Frage, z. B. zum Einfügen in einem anderen Fach">📋 Alle kopieren</button>
+        <button class="btn primary" id="qAdd">Anhängen</button></span>
     </div>
     ${qs.length ? `<ol class="qlist">${qs.map(q => `<li class="${q === nextN || q === nextT ? "next" : ""}">${mode(q)}<span class="qt">${esc(q.text)}</span>${dots(q)}
       <button class="btn ghost icon" data-qedit="${q.id}" title="Bearbeiten">✏️</button><button class="btn ghost icon" data-qarch="${q.id}" title="Inaktiv setzen (ins Archiv)">📦</button><button class="btn ghost icon danger" data-qdel="${q.id}" title="Löschen">✕</button></li>`).join("")}</ol>` : ""}
@@ -761,6 +762,16 @@ function renderQuestionsTab() {
       <button class="btn ghost small" data-qrestore="${q.id}" title="Wieder aktiv: hinten anhängen, Zähler auf 0">↺ reaktivieren</button><button class="btn ghost icon danger" data-qdel="${q.id}" title="Löschen">✕</button></li>`).join("")}</ul></details>` : ""}
   </div>`;
   const byId = id => c.questions.find(q => String(q.id) === id);
+  $("#qCopy").disabled = !c.questions.length;
+  $("#qCopy").onclick = async () => {
+    const all = qs.concat(done), text = all.map(q => q.text.replace(/\s*\n\s*/g, " ")).join("\n");
+    try { await navigator.clipboard.writeText(text); }
+    catch (e) {   // z. B. ohne HTTPS: über ein unsichtbares Textfeld kopieren
+      const ta = document.createElement("textarea"); ta.value = text; document.body.append(ta); ta.select();
+      document.execCommand("copy"); ta.remove();
+    }
+    Sound.click(); toast(`${all.length} Fragen kopiert`);
+  };
   $("#qAdd").onclick = async () => {
     const texts = $("#qNew").value.split(/\r?\n/).map(x => x.trim()).filter(Boolean);
     if (!texts.length) return;

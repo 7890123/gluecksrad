@@ -73,6 +73,7 @@ Update: `podman build --format docker -t gluecksrad .` und `systemctl --user res
   „andere Frage ↻“ springt eine weiter. Bewertung im Turbo: **≥ 90 %** −1 Eintrag, **30–89 %** bleibt, **< 30 %** +1.
   Ab 50 % zählt die Frage als richtig; nach 3 richtigen Antworten wird sie inaktiv und kommt ins **Archiv**
   (wird nicht gelöscht, im Tab „Fragen“ unter „📦 Archiv“ jederzeit reaktivierbar).
+  **📋 Alle kopieren** kopiert alle Fragen des Fachs (Pool, dann Archiv) im Eingabeformat – eine Zeile pro Frage.
   „Pro Tag nur einmal dran“ gilt auch im Turbo.
 - **Fragen im normalen Modus:** Fragen mit **(2P)** oder **(3P)** im Text kommen im normalen Modus dran (ebenfalls der
   Reihe nach, eigener Zähler), alle anderen nur im Turbo. Ohne solche Fragen erscheint im normalen Modus keine Frage.
