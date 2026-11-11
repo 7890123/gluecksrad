@@ -453,3 +453,7 @@ table.hist tr.absent td{color:var(--bad)} table.hist tr.absent a.stud{color:inhe
 #qText:not([hidden]){animation:qin .4s ease-out}
 @keyframes qin{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 .qorder{margin-left:0}
+/* ITAC A Mode: freie weiße Fläche unter der Frage zum Zeichnen an der Tafel */
+.board{height:clamp(220px,48vh,720px);margin:0 0 16px;border-radius:16px;background:#fff;border:1px solid var(--stroke)}
+#rateDlg.itac:has(#qBox:not([hidden])){width:min(1100px,98vw);max-height:98vh}
+#qItac.on{background:#fff;color:#151935;border-color:#fff}

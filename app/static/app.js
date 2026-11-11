@@ -16,6 +16,7 @@ const isTurbo = () => !!state.current && store.get("turbo:" + state.current.subj
 const outcomeOf = s => isTurbo() ? (s >= 90 ? "removed" : s >= 30 ? "kept" : "added") : s >= 70 ? "removed" : s >= 50 ? "kept" : "added";
 const Q_DELAY = 10;            // Sekunden nach dem Ziehen, bis die Frage erscheint
 const Q_OK = 50, Q_DONE = 3;   // Frage zählt ab 50 % als richtig, nach 3x richtig kommt sie ins Archiv (nicht gelöscht)
+const isItac = () => store.get("itac") === "1";   // ITAC A Mode (pro Browser): weiße Zeichenfläche unter der Frage
 // Fragen mit „(2P)“ oder „(3P)“ im Text kommen im normalen Modus dran, alle anderen nur im Turbo
 const isNormalQ = q => /\(\s*[23]\s*P\s*\)/i.test(q.text);
 const OUT_TEXT_STD = { removed: "fliegt aus dem Rad", kept: "bleibt im Rad", added: "kommt ein zusätzliches Mal ins Rad" };
@@ -584,7 +585,8 @@ function openRating(s, pos) {
   const live = state.current.students.find(x => x.id === s.id) || s, jb = $("#jokerBtn");
   jb.hidden = !live.jokers; jb.textContent = `🃏 Joker (${live.jokers})`;
   state.qSkip = 0; state.qRand = null; startQuestionDelay(); renderQuestionBox();
-  setScore(60); if (!dlg.open) dlg.showModal(); $("#saveBtn").focus();
+  setScore(60); if (!dlg.open) dlg.showModal();
+  $("#saveBtn").focus({ preventScroll: true }); dlg.scrollTop = 0;   // Name und Frage oben sichtbar lassen (ITAC A: Dialog ist hoch)
 }
 // YAML-Einzeiler in Fragen ({ a: { b: [ x ] } }) als eingerückten Block darstellen; der Text bleibt unverändert gespeichert
 function parseFlowYaml(src) {
@@ -670,6 +672,8 @@ function renderQuestionBox() {
   const box = $("#qBox"), turbo = isTurbo(), qs = activeQuestions(), q = currentQuestion();
   box.hidden = !turbo && !q;    // normaler Modus ohne (2P)/(3P)-Fragen: keine Box
   box.classList.toggle("turbo", turbo);
+  $("#qBoard").hidden = box.hidden || !isItac(); $("#qItac").classList.toggle("on", isItac());
+  dlg.classList.toggle("itac", !box.hidden && isItac());
   if (box.hidden) return;
   const wait = q ? Math.ceil((state.qRevealAt - Date.now()) / 1000) : 0;
   box.classList.toggle("waiting", wait > 0);
@@ -689,6 +693,7 @@ function startQuestionDelay() {
 }
 function revealQuestion() { clearInterval(state.qTimer); state.qRevealAt = 0; renderQuestionBox(); setScore(range.value); if (!$("#qBox").hidden) safe(() => Sound.pop()); }
 $("#qShow").onclick = revealQuestion;
+$("#qItac").onclick = () => { store.set("itac", isItac() ? "0" : "1"); renderQuestionBox(); Sound.click(); };
 $("#qNext").onclick = () => { state.qSkip = (state.qSkip || 0) + 1; renderQuestionBox(); setScore(range.value); Sound.click(); };
 function applyTurbo() {
   const on = isTurbo();
