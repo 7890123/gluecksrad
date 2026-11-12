@@ -132,6 +132,10 @@ CREATE TABLE IF NOT EXISTS questions (
     done_at     INTEGER                     -- gesetzt = 3x richtig beantwortet, nicht mehr im Pool
 );
 CREATE INDEX IF NOT EXISTS idx_questions_subject ON questions(subject_id, sort);
+CREATE TABLE IF NOT EXISTS meta (
+    key         TEXT PRIMARY KEY,           -- einmalige Datenkorrekturen u. Ä.
+    value       TEXT
+);
 CREATE INDEX IF NOT EXISTS idx_students_class ON students(class_id);
 CREATE INDEX IF NOT EXISTS idx_history_class ON history(class_id, id);
 """
@@ -211,9 +215,13 @@ def init_db():
                 con.execute("ALTER TABLE subjects ADD COLUMN normal_last INTEGER")  # dasselbe für (2P)/(3P)-Fragen im normalen Modus
             if "q_random" not in fcols:
                 con.execute("ALTER TABLE subjects ADD COLUMN q_random INTEGER NOT NULL DEFAULT 0")  # Fragen zufällig statt der Reihe nach
+            qcols = [r[1] for r in con.execute("PRAGMA table_info(questions)")]
+            if "asked_day" not in qcols:
+                con.execute("ALTER TABLE questions ADD COLUMN asked_day TEXT")   # zuletzt gestellt (JJJJ-MM-TT) – pro Tag nur 1x
             migrate_v1(con)
             migrate_subjects(con)
             migrate_jokers(con)
+            restore_unpaused(con)
             con.execute("DELETE FROM sessions WHERE expires_at < ?", (int(time.time()),))
             # optional: Admin per Umgebungsvariablen anlegen
             au, ap = os.environ.get("ADMIN_USER"), os.environ.get("ADMIN_PASSWORD")
@@ -265,6 +273,27 @@ def migrate_jokers(con):
             con.execute("""INSERT INTO subject_jokers VALUES (?,?,?,?) ON CONFLICT(subject_id, student_id)
                            DO UPDATE SET jokers=jokers+excluded.jokers""", (subj, sid, n, day))
     con.execute("UPDATE students SET jokers=0, joker_day=NULL WHERE jokers > 0 OR joker_day IS NOT NULL")
+
+
+def restore_unpaused(con):
+    """Einmalig: Wer vor Einführung der 3-Wochen-Pause ganz aus dem Rad geflogen ist (0 Einträge, kein Pausen-Datum),
+    kommt wieder genau einmal ins Rad – in jedem Fach der Klasse."""
+    if con.execute("SELECT 1 FROM meta WHERE key='restore_unpaused'").fetchone():
+        return
+    n = 0
+    for subj, cid in con.execute("SELECT id, class_id FROM subjects").fetchall():
+        pool = read_pool(con, subj)
+        paused = {r[0] for r in con.execute("SELECT student_id FROM subject_pause WHERE subject_id=?", (subj,))}
+        missing = [r[0] for r in con.execute("SELECT id FROM students WHERE class_id=? ORDER BY sort", (cid,))
+                   if r[0] not in pool and r[0] not in paused]
+        for sid in missing:
+            insert_random(pool, sid)
+        if missing:
+            write_pool(con, subj, pool)
+            n += len(missing)
+    con.execute("INSERT INTO meta VALUES ('restore_unpaused', ?)", (str(int(time.time())),))
+    if n:
+        print(f"{n} Schüler/innen ohne Pausen-Datum wieder ins Rad geholt", flush=True)
 
 
 def add_jokers(con, where="", args=()):
@@ -370,7 +399,8 @@ def class_obj(con, cid, subj=None):
     pauses = {r[0]: r[1] for r in con.execute("SELECT student_id, until FROM subject_pause WHERE subject_id=?", (subj,))}
     day_out = {r[0]: {"day": r[1], "reason": r[2]} for r in con.execute(
         "SELECT student_id, day, reason FROM subject_day_out WHERE subject_id=?", (subj,))}
-    questions = [{"id": r["id"], "text": r["text"], "sort": r["sort"], "correct": r["correct"], "done": r["done_at"]}
+    questions = [{"id": r["id"], "text": r["text"], "sort": r["sort"], "correct": r["correct"], "done": r["done_at"],
+                  "askedDay": r["asked_day"] or ""}
                  for r in con.execute("SELECT * FROM questions WHERE subject_id=? ORDER BY sort", (subj,))]
     turbo_last, normal_last, q_random = con.execute(
         "SELECT turbo_last, normal_last, q_random FROM subjects WHERE id=?", (subj,)).fetchone()
@@ -978,6 +1008,8 @@ def route(con, method, parts, body, user):
                             (body.get("questionId"), subj)).fetchone()
             if q:
                 question = q["text"]
+                if body.get("day"):    # pro Tag nur einmal stellen
+                    con.execute("UPDATE questions SET asked_day=? WHERE id=?", (valid_day(body["day"]), q["id"]))
                 con.execute(f"UPDATE subjects SET {'turbo_last' if turbo else 'normal_last'}=? WHERE id=?",
                             (q["sort"], subj))   # nächstes Mal die folgende Frage
                 if score >= QUESTION_OK_AT:

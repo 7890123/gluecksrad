@@ -12,6 +12,8 @@ const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 // Turbo-Modus (pro Fach, im Browser gemerkt): Fragen aus dem Pool, Rad und Ton 5x schneller, eigene Schwellen
 const TURBO_SPEED = 5;
+// Karteikarten-Modus (pro Fach, im Browser gemerkt): statt des Rads wird eine Karte aus dem Stapel gezogen
+const isCard = () => !!state.current && store.get("card:" + state.current.subject) === "1";
 const isTurbo = () => !!state.current && store.get("turbo:" + state.current.subject) === "1";
 const outcomeOf = s => isTurbo() ? (s >= 90 ? "removed" : s >= 30 ? "kept" : "added") : s >= 70 ? "removed" : s >= 50 ? "kept" : "added";
 const Q_DELAY = 10;            // Sekunden nach dem Ziehen, bis die Frage erscheint
@@ -198,19 +200,20 @@ function renderWheelTab() {
   $("#tab").innerHTML = `
     <div class="wheelwrap">
       <div class="glass wheelcard">
-        <div class="wheel" id="wheelBox"><div class="glow"></div>
+        ${isCard() ? cardStageHtml() : `<div class="wheel" id="wheelBox"><div class="glow"></div>
           <canvas id="wheel" width="1100" height="1100"></canvas>${POINTER_SVG}
           <button class="hub" id="hub" title="Drehen (Leertaste)"><img src="${SEASON().hub}" alt="Drehen"></button>
-        </div>
+        </div>`}
         <div class="controls">
           <button class="btn" id="shuffleBtn" title="Reihenfolge im Rad zufällig mischen">🎲 Mischen</button>
-          <button class="btn primary" id="spin">${SEASON().spin}</button>
+          <button class="btn primary" id="spin">${isCard() ? "🗂️ Karte ziehen" : SEASON().spin}</button>
           <button class="btn" id="resetBtn" title="Jede/n genau einmal ins Rad">↺ Zurücksetzen</button>
           <button class="btn turbobtn ${isTurbo() ? "on" : ""}" id="turboBtn" title="Turbo: Fragen aus dem Pool der Reihe nach, Rad und Ton 5× schneller">⚡ Turbo</button>
+          <button class="btn cardbtn ${isCard() ? "on" : ""}" id="cardBtn" title="Karteikarte statt Glücksrad: eine Karte wird aus dem Stapel gezogen">🗂️ Karteikarte</button>
         </div>
         <div class="hint">${isTurbo()
-          ? `<span><b>⚡ Turbo</b> · ${activeQuestions(true).length} Fragen</span><span><b class="g">≥ 90 %</b> −1</span><span><b class="m">30–89 %</b> bleibt</span><span><b class="r">&lt; 30 %</b> +1 im Rad</span>`
-          : `<span><b class="g">≥ 70 %</b> −1 (letzter → 3 Wochen Pause)</span><span><b class="m">50–69 %</b> bleibt</span><span><b class="r">&lt; 50 %</b> +1 im Rad</span>`}<span>Leertaste = drehen</span></div>
+          ? `<span><b>⚡ Turbo</b> · ${askable(true).length} Fragen heute offen</span><span><b class="g">≥ 90 %</b> −1</span><span><b class="m">30–89 %</b> bleibt</span><span><b class="r">&lt; 30 %</b> +1 im Rad</span>`
+          : `<span><b class="g">≥ 70 %</b> −1 (letzter → 3 Wochen Pause)</span><span><b class="m">50–69 %</b> bleibt</span><span><b class="r">&lt; 50 %</b> +1 im Rad</span>`}<span>Leertaste = ${isCard() ? "ziehen" : "drehen"}</span></div>
       </div>
       <div class="side">
         ${last ? `<div class="glass panel"><h3>Zuletzt gezogen</h3>
@@ -243,7 +246,14 @@ function renderWheelTab() {
   setHub(hubAngle);
   if (isEaster()) hideEgg();
   setControls();
-  $("#spin").onclick = $("#hub").onclick = spin;
+  $("#spin").onclick = spin; if ($("#hub")) $("#hub").onclick = spin;
+  if ($("#kcard")) $("#kcard").onclick = spin;
+  $("#cardBtn").onclick = () => {
+    if (state.spinning || state.pendingRating) return;
+    const on = !isCard(); store.set("card:" + c.subject, on ? "1" : "0");
+    renderMain(); safe(() => { Sound.unlock(); on ? Sound.shuffle() : Sound.click(); });
+    toast(on ? "🗂️ Karteikarte statt Glücksrad" : "Glücksrad");
+  };
   $("#shuffleBtn").onclick = shuffle;
   $("#turboBtn").onclick = () => {
     if (state.spinning || state.pendingRating) return;
@@ -461,6 +471,7 @@ const safe = fn => { try { fn(); } catch (e) { console.warn(e); } };   // Ton-Fe
 
 function spin() {
   if (state.spinning || state.pendingRating || dlg.open || !state.current) return;
+  if (isCard()) return drawCard();
   const segs = poolSegments(), n = segs.length; if (!n) return;
   safe(() => { Sound.unlock(); Sound.spinStart(); });
   const buf = new Uint32Array(1); crypto.getRandomValues(buf);
@@ -505,6 +516,61 @@ function spin() {
     } catch (e) { console.warn(e); }
     if (t < mo.total) requestAnimationFrame(frame); else finish(ang);
   })(t0);
+}
+/* ---------------- Karteikarte (statt Rad) ---------------- */
+function cardStageHtml() {
+  const segs = poolSegments(), n = segs.length;
+  const empty = !n ? (state.current.pool.length ? "Alle waren heute dran" : "Stapel ist leer") : "";
+  return `<div class="cardstage ${n ? "" : "empty"}" id="cardStage">
+    ${n > 2 ? '<div class="kcard back b2"></div>' : ""}${n > 1 ? '<div class="kcard back b1"></div>' : ""}
+    <div class="kcard top" id="kcard" title="${n ? "Karte ziehen (Leertaste)" : ""}"><span class="kstripe" id="kstripe"></span>
+      <div class="kname" id="kname">${empty ? esc(empty) : "?"}</div></div>
+    <div class="kcount muted">${n} ${n === 1 ? "Karte" : "Karten"} im Stapel</div></div>`;
+}
+// Karten werden durchgeblättert – erst schnell, dann immer langsamer; die letzte ist die gezogene
+function drawCard() {
+  const segs = poolSegments(), n = segs.length; if (!n) return;
+  const card = $("#kcard"); if (!card) return;
+  safe(() => { Sound.unlock(); Sound.shuffle(); });
+  const buf = new Uint32Array(1); crypto.getRandomValues(buf);
+  const k = buf[0] % n, classId = state.current.id, subjId = state.current.subject;
+  const SP = isTurbo() ? TURBO_SPEED : 1;
+  state.spinning = true; state.winnerPos = null; state.drawn = null; setControls();
+  card.classList.remove("win");
+  const steps = Math.min(30, 16 + n), seq = [];
+  for (let i = 0; i < steps - 1; i++) {
+    let s; do { s = segs[Math.floor(Math.random() * n)]; } while (n > 1 && s === seq[seq.length - 1]);
+    seq.push(s);
+  }
+  if (n > 1 && seq[seq.length - 1] === segs[k]) seq[seq.length - 1] = segs[(k + 1) % n];
+  seq.push(segs[k]);
+  const show = s => {
+    const nm = $("#kname"), st = $("#kstripe"); if (!nm) return;
+    nm.textContent = s.name; st.style.background = colorFor(s.id);
+  };
+  let i = 0;
+  (function next() {
+    if (!$("#kcard")) { state.spinning = false; setControls(); return; }
+    const u = i / (steps - 1), gap = (55 + 520 * Math.pow(u, 2.4)) / SP, c = $("#kcard");
+    c.style.animationDuration = Math.min(gap * 0.9, 320) + "ms";
+    c.classList.remove("flip"); void c.offsetWidth; c.classList.add("flip");
+    const s = seq[i];
+    setTimeout(() => show(s), Math.min(gap * 0.45, 160));
+    safe(() => Sound.tick(1 - u * 0.8));
+    if (++i < steps) return void setTimeout(next, gap);
+    setTimeout(() => {   // gezogen
+      state.spinning = false;
+      if (!state.current || state.current.id !== classId || state.current.subject !== subjId) { setControls(); return; }
+      const c2 = $("#kcard"); if (c2) c2.classList.add("win");
+      state.winnerPos = k; state.pendingRating = true;
+      safe(() => Sound.win()); safe(() => confetti(70, { x: innerWidth / 2, y: innerHeight * 0.35 }));
+      if (isHW()) bats(4);
+      if (isXmas()) snow(5000, 90);
+      if (isEaster()) bunnies(1);
+      setControls();
+      setTimeout(() => { state.pendingRating = false; openRating(segs[k], segs[k].pos); }, 900 / SP);
+    }, Math.min(gap, 320));
+  })();
 }
 // Logo in der Radmitte: Propeller-Effekt
 let hubAngle = 0;
@@ -651,6 +717,8 @@ function fmtQuestion(text) {
 function activeQuestions(turbo = isTurbo()) {
   return state.current ? state.current.questions.filter(q => !q.done && isNormalQ(q) !== turbo) : [];
 }
+// heute schon gestellte Fragen kommen erst morgen wieder
+const askable = turbo => activeQuestions(turbo).filter(q => q.askedDay !== today());
 function randomOrder(qs, last) {
   // pro Dialog einmal mischen (openRating setzt state.qRand zurück); die zuletzt gestellte Frage nicht gleich wieder
   const key = qs.map(q => q.id).join(",");
@@ -662,14 +730,14 @@ function randomOrder(qs, last) {
   return order;
 }
 function currentQuestion(turbo = isTurbo()) {
-  const qs = activeQuestions(turbo); if (!qs.length) return null;
+  const qs = askable(turbo); if (!qs.length) return null;
   const last = turbo ? state.current.turboLast : state.current.normalLast, skip = turbo === isTurbo() ? state.qSkip || 0 : 0;
   if (state.current.qRandom) return turbo === isTurbo() ? randomOrder(qs, last)[skip % qs.length] : null;
   const start = Math.max(0, qs.findIndex(q => q.sort > last));
   return qs[(start + skip) % qs.length];
 }
 function renderQuestionBox() {
-  const box = $("#qBox"), turbo = isTurbo(), qs = activeQuestions(), q = currentQuestion();
+  const box = $("#qBox"), turbo = isTurbo(), qs = askable(turbo), q = currentQuestion();
   box.hidden = !turbo && !q;    // normaler Modus ohne (2P)/(3P)-Fragen: keine Box
   box.classList.toggle("turbo", turbo);
   $("#qBoard").hidden = box.hidden || !isItac(); $("#qItac").classList.toggle("on", isItac());
@@ -679,8 +747,9 @@ function renderQuestionBox() {
   box.classList.toggle("waiting", wait > 0);
   $("#qWait").hidden = wait <= 0; $("#qText").hidden = wait > 0; $("#qNext").hidden = wait > 0 || qs.length < 2;
   if (wait > 0) $("#qWaitN").textContent = wait;
-  $("#qText").innerHTML = q ? fmtQuestion(q.text) : "Noch keine Fragen – im Tab „Fragen“ anlegen.";
-  $("#qMeta").textContent = (turbo ? "⚡ " : "❓ ") + (q ? `${state.current.qRandom ? "Zufallsfrage" : `Frage ${qs.indexOf(q) + 1} von ${qs.length}`} · ${"✓".repeat(q.correct)}${"○".repeat(Q_DONE - q.correct)}` : "Turbo");
+  $("#qText").innerHTML = q ? fmtQuestion(q.text)
+    : activeQuestions(turbo).length ? "Alle Fragen wurden heute schon gestellt." : "Noch keine Fragen – im Tab „Fragen“ anlegen.";
+  $("#qMeta").textContent = (turbo ? "⚡ " : "❓ ") + (q ? `${state.current.qRandom ? "Zufallsfrage" : `Frage ${qs.indexOf(q) + 1} von ${qs.length} (heute offen)`} · ${"✓".repeat(q.correct)}${"○".repeat(Q_DONE - q.correct)}` : "Turbo");
 }
 // Frage erst Q_DELAY Sekunden nach dem Ziehen zeigen (Countdown, vorzeitig per Klick)
 function startQuestionDelay() {
@@ -838,7 +907,7 @@ function renderQuestionsTab() {
   $("#tab").innerHTML = `<div class="glass card">
     <div class="row" style="justify-content:space-between;flex-wrap:wrap"><div class="label">Fragen · ${esc(currentSubject().name)}</div>
       <div class="seg qorder" title="Gilt für dieses Fach, für alle Lehrkräfte der Klasse"><button data-qorder="0" class="${c.qRandom ? "" : "on"}">↓ der Reihe nach</button><button data-qorder="1" class="${c.qRandom ? "on" : ""}">🎲 zufällig</button></div></div>
-    <div class="muted" style="margin:4px 0 10px">Eine Frage pro Zeile – neue werden unten angehängt, sie kommen ${c.qRandom ? "in zufälliger Reihenfolge" : "der Reihe nach (▶ = nächste)"} dran, im Dialog erst ${Q_DELAY} s nach dem Ziehen.
+    <div class="muted" style="margin:4px 0 10px">Eine Frage pro Zeile – neue werden unten angehängt, jede höchstens einmal pro Tag; sie kommen ${c.qRandom ? "in zufälliger Reihenfolge" : "der Reihe nach (▶ = nächste)"} dran, im Dialog erst ${Q_DELAY} s nach dem Ziehen.
       Fragen mit <b>(2P)</b> oder <b>(3P)</b> im Text kommen im normalen Modus, alle anderen nur im ⚡ Turbo.
       Ab ${Q_OK} % zählt eine Antwort als richtig; nach ${Q_DONE} richtigen Antworten wird die Frage inaktiv und ins Archiv verschoben (unten, jederzeit reaktivierbar).</div>
     <textarea id="qNew" rows="4" placeholder="Was ist die Hauptstadt von Frankreich?&#10;Nenne drei Laubbäume.&#10;…"></textarea>
@@ -847,7 +916,7 @@ function renderQuestionsTab() {
       <span class="row"><button class="btn" id="qCopy" title="Alle Fragen dieses Fachs (Pool, dann Archiv) kopieren – eine Zeile pro Frage, z. B. zum Einfügen in einem anderen Fach">📋 Alle kopieren</button>
         <button class="btn primary" id="qAdd">Anhängen</button></span>
     </div>
-    ${qs.length ? `<ol class="qlist">${qs.map(q => `<li class="${q === nextN || q === nextT ? "next" : ""}">${mode(q)}<span class="qt">${fmtQuestion(q.text)}</span>${dots(q)}
+    ${qs.length ? `<ol class="qlist">${qs.map(q => `<li class="${q === nextN || q === nextT ? "next" : ""}">${mode(q)}<span class="qt">${fmtQuestion(q.text)}</span>${q.askedDay === today() ? `<span class="qtoday" title="Heute schon gestellt – kommt erst morgen wieder">heute ✓</span>` : ""}${dots(q)}
       <button class="btn ghost icon" data-qedit="${q.id}" title="Bearbeiten">✏️</button><button class="btn ghost icon" data-qarch="${q.id}" title="Inaktiv setzen (ins Archiv)">📦</button><button class="btn ghost icon danger" data-qdel="${q.id}" title="Löschen">✕</button></li>`).join("")}</ol>` : ""}
     ${done.length ? `<details class="qdone"><summary>📦 Archiv (${done.length})</summary><ul class="qlist">${done.map(q => `<li>${mode(q)}<span class="qt">${fmtQuestion(q.text)}</span>${dots(q)}
       <button class="btn ghost small" data-qrestore="${q.id}" title="Wieder aktiv: hinten anhängen, Zähler auf 0">↺ reaktivieren</button><button class="btn ghost icon danger" data-qdel="${q.id}" title="Löschen">✕</button></li>`).join("")}</ul></details>` : ""}

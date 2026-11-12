@@ -68,6 +68,8 @@ Update: `podman build --format docker -t gluecksrad .` und `systemctl --user res
 - **Spalte „Heute“** in der Namensliste: *abwesend* oder *schon dran* (außerhalb des Rads) nimmt jemanden für heute aus
   dem Rad, ebenso ein 🃏 Joker. Zurück auf „–“ holt die Person heute wieder ins Rad.
   *Abwesend* wird im Verlauf mit Datum protokolliert (Statistik „Abwesend“, auch pro Schüler/in filterbar).
+- **🗂️ Karteikarte** (Knopf neben „Drehen“, pro Fach im Browser gemerkt): statt des Glücksrads wird eine Karte aus
+  dem Stapel gezogen – gleiche Gewichtung (Anzahl der Einträge), Turbo beschleunigt auch das Blättern.
 - **⚡ Turbo-Modus** (Knopf neben „Drehen“, pro Fach): Rad und Töne laufen 5× schneller, nach der Ziehung erscheint eine
   Frage aus dem **Fragenpool** des Fachs (Tab „Fragen“: eine Zeile pro Frage, neue unten anhängen) – der Reihe nach,
   „andere Frage ↻“ springt eine weiter. Bewertung im Turbo: **≥ 90 %** −1 Eintrag, **30–89 %** bleibt, **< 30 %** +1.
@@ -78,6 +80,7 @@ Update: `podman build --format docker -t gluecksrad .` und `systemctl --user res
   **🎲 zufällig** (die zuletzt gestellte Frage kommt nicht gleich wieder).
   **⬜ ITAC A Mode** (Knopf im Fragenfeld, pro Browser gemerkt): breiter Dialog mit großer weißer Fläche unter der
   Frage – frei für Zeichnungen an der Tafel; die Bewertung liegt darunter.
+  Jede Frage kommt **höchstens einmal pro Tag** dran (im Tab „Fragen“ mit „heute ✓“ markiert).
   **📋 Alle kopieren** kopiert alle Fragen des Fachs (Pool, dann Archiv) im Eingabeformat – eine Zeile pro Frage.
   YAML-Einzeiler in Fragen (z. B. `services: { plex: { image: …, volumes: [ … ] } }`) werden als eingerückter
   YAML-Block angezeigt; gespeichert und kopiert wird der Originaltext.
