@@ -54,7 +54,7 @@ Update: `podman build --format docker -t gluecksrad .` und `systemctl --user res
 - Neue Namen und zusätzliche Einträge (Bewertung < 50 %, „+“) landen an **zufälliger Position**
 - Bewertung nach der Ziehung:
   - **≥ 70 %** → der gezogene Eintrag fliegt raus (ein Eintrag weniger). War es der letzte, pausiert die/der Schüler/in
-    **3 Wochen** in diesem Fach (⏸ in der Namensliste) und kommt danach automatisch wieder **einmal** ins Rad.
+    **20 Tage** in diesem Fach (⏸ in der Namensliste) und kommt danach (ab **5 Uhr früh**) automatisch wieder **einmal** ins Rad.
     „+“ oder „Zurücksetzen“ beenden die Pause sofort.
   - **50–69 %** → bleibt
   - **< 50 %** → zusätzlicher Eintrag an zufälliger Position

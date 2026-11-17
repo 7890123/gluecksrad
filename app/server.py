@@ -14,9 +14,11 @@ import secrets
 import sqlite3
 import threading
 import time
+from datetime import date, datetime, timedelta
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 DATA_DIR = Path(os.environ.get("DATA_DIR", "/data"))
 DB_FILE = DATA_DIR / "gluecksrad.db"
@@ -26,11 +28,13 @@ PORT = int(os.environ.get("PORT", "8080"))
 REMOVE_AT = 70   # >= 70 %  -> ein Eintrag wird aus dem Rad entfernt
 KEEP_AT = 50     # 50–69 %  -> bleibt; < 50 % -> zusätzlicher Eintrag an zufälliger Position
 DAY_OUT_REASONS = ("drawn", "absent", "other")   # heute dran gewesen · abwesend · außerhalb des Rads dran
-PAUSE_DAYS = 21
+PAUSE_DAYS = 20       # letzter Eintrag mit >= 70 % entfernt -> 20 Tage Pause, danach wieder 1x im Rad
+PAUSE_HOUR = 5        # … und zwar ab 5 Uhr früh (Ortszeit)
+LOCAL_TZ = ZoneInfo(os.environ.get("TZ_NAME", "Europe/Vienna"))
 TURBO_REMOVE_AT = 90   # Turbo: >= 90 % -> ein Eintrag weniger
 TURBO_ADD_BELOW = 30   # Turbo: < 30 % -> zusätzlicher Eintrag
 QUESTION_OK_AT = 50    # ab 50 % zählt die Frage als richtig beantwortet
-QUESTION_DONE = 3      # nach 3 richtigen Antworten fliegt die Frage aus dem Pool  # letzter Eintrag mit >= 70 % entfernt -> 3 Wochen Pause, danach wieder 1x im Rad
+QUESTION_DONE = 3      # nach 3 richtigen Antworten fliegt die Frage aus dem Pool
 
 LOCK = threading.Lock()
 RNG = random.SystemRandom()
@@ -222,6 +226,7 @@ def init_db():
             migrate_subjects(con)
             migrate_jokers(con)
             restore_unpaused(con)
+            migrate_pauses(con)
             con.execute("DELETE FROM sessions WHERE expires_at < ?", (int(time.time()),))
             # optional: Admin per Umgebungsvariablen anlegen
             au, ap = os.environ.get("ADMIN_USER"), os.environ.get("ADMIN_PASSWORD")
@@ -275,8 +280,28 @@ def migrate_jokers(con):
     con.execute("UPDATE students SET jokers=0, joker_day=NULL WHERE jokers > 0 OR joker_day IS NOT NULL")
 
 
+def pause_until(day=None):
+    """Ende der Pause: Tag der Ziehung + PAUSE_DAYS, PAUSE_HOUR Uhr Ortszeit (als Unix-Zeit)."""
+    try:
+        d = date.fromisoformat(valid_day(day))
+    except ApiError:
+        d = datetime.now(LOCAL_TZ).date()
+    d += timedelta(days=PAUSE_DAYS)
+    return int(datetime(d.year, d.month, d.day, PAUSE_HOUR, tzinfo=LOCAL_TZ).timestamp())
+
+
+def migrate_pauses(con):
+    """Einmalig: laufende Pausen von „3 Wochen ab Zeitpunkt der Ziehung“ auf „20 Tage, ab 5 Uhr früh“ umstellen."""
+    if con.execute("SELECT 1 FROM meta WHERE key='pause_20d'").fetchone():
+        return
+    for subj, sid, until in con.execute("SELECT subject_id, student_id, until FROM subject_pause").fetchall():
+        drawn = datetime.fromtimestamp(until - 21 * 86400, LOCAL_TZ).date().isoformat()
+        con.execute("UPDATE subject_pause SET until=? WHERE subject_id=? AND student_id=?", (pause_until(drawn), subj, sid))
+    con.execute("INSERT INTO meta VALUES ('pause_20d', ?)", (str(int(time.time())),))
+
+
 def restore_unpaused(con):
-    """Einmalig: Wer vor Einführung der 3-Wochen-Pause ganz aus dem Rad geflogen ist (0 Einträge, kein Pausen-Datum),
+    """Einmalig: Wer vor Einführung der Pause ganz aus dem Rad geflogen ist (0 Einträge, kein Pausen-Datum),
     kommt wieder genau einmal ins Rad – in jedem Fach der Klasse."""
     if con.execute("SELECT 1 FROM meta WHERE key='restore_unpaused'").fetchone():
         return
@@ -998,7 +1023,7 @@ def route(con, method, parts, body, user):
                 pool.remove(s["id"])
             if s["id"] not in pool:     # letzter Eintrag -> Pause, danach kommt er/sie wieder 1x ins Rad
                 con.execute("INSERT OR REPLACE INTO subject_pause VALUES (?,?,?)",
-                            (subj, s["id"], int(time.time()) + PAUSE_DAYS * 86400))
+                            (subj, s["id"], pause_until(body.get("day"))))
         elif outcome == "added":
             insert_random(pool, s["id"])
         write_pool(con, subj, pool)

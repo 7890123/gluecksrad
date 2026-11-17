@@ -213,7 +213,7 @@ function renderWheelTab() {
         </div>
         <div class="hint">${isTurbo()
           ? `<span><b>⚡ Turbo</b> · ${askable(true).length} Fragen heute offen</span><span><b class="g">≥ 90 %</b> −1</span><span><b class="m">30–89 %</b> bleibt</span><span><b class="r">&lt; 30 %</b> +1 im Rad</span>`
-          : `<span><b class="g">≥ 70 %</b> −1 (letzter → 3 Wochen Pause)</span><span><b class="m">50–69 %</b> bleibt</span><span><b class="r">&lt; 50 %</b> +1 im Rad</span>`}<span>Leertaste = ${isCard() ? "ziehen" : "drehen"}</span></div>
+          : `<span><b class="g">≥ 70 %</b> −1 (letzter → 20 Tage Pause)</span><span><b class="m">50–69 %</b> bleibt</span><span><b class="r">&lt; 50 %</b> +1 im Rad</span>`}<span>Leertaste = ${isCard() ? "ziehen" : "drehen"}</span></div>
       </div>
       <div class="side">
         ${last ? `<div class="glass panel"><h3>Zuletzt gezogen</h3>
@@ -264,7 +264,7 @@ function renderWheelTab() {
   $("#resetBtn").onclick = async () => {
     const paused = Object.keys(state.current.pauses).length;
     if (!confirm("Rad zurücksetzen? Jede/r Schüler/in ist danach genau einmal im Rad (zufällige Reihenfolge)."
-      + (paused ? `\n\nAchtung: ${paused === 1 ? "1 laufende 3-Wochen-Pause endet" : `${paused} laufende 3-Wochen-Pausen enden`} dabei sofort.` : ""))) return;
+      + (paused ? `\n\nAchtung: ${paused === 1 ? "1 laufende 20-Tage-Pause endet" : `${paused} laufende 20-Tage-Pausen enden`} dabei sofort.` : ""))) return;
     Sound.shuffle(); setCurrent(await api("POST", subjUrl("/reset")));
   };
   $("#quickAdd").onsubmit = async e => {
@@ -623,6 +623,8 @@ async function shuffle() {
 const dlg = $("#rateDlg"), range = $("#scoreRange");
 $("#quick").innerHTML = [100, 90, 80, 70, 60, 50, 40, 30, 20, 0].map(v => `<button class="btn" data-v="${v}">${v}</button>`).join("");
 document.querySelectorAll("#quick button").forEach(b => b.onclick = () => { Sound.click(); setScore(+b.dataset.v); });
+// Ende einer neuen Pause: heute + 20 Tage, 5 Uhr früh (rechnet der Server genauso)
+const pauseEnd = () => { const d = new Date(); d.setHours(5, 0, 0, 0); d.setDate(d.getDate() + 20); return Math.floor(d / 1000); };
 function setScore(v) {
   v = Math.max(0, Math.min(100, Math.round(+v || 0)));
   range.value = v;
@@ -632,7 +634,7 @@ function setScore(v) {
   const last = s && o === "removed" && state.current.pool.filter(id => id === s.id).length === 1;
   box.className = "result o-" + o;
   const q = !state.qRevealAt && currentQuestion();   // erst zählen, wenn die Frage sichtbar ist
-  box.textContent = `${s ? s.name : ""} ${OUT_TEXT[o]}${last ? " – 3 Wochen Pause, danach wieder 1× im Rad" : ""}`
+  box.textContent = `${s ? s.name : ""} ${OUT_TEXT[o]}${last ? ` – 20 Tage Pause, ab ${fmtDay(pauseEnd())} wieder 1× im Rad` : ""}`
     + (q ? ` · Frage ${v >= Q_OK ? `richtig (${q.correct + 1}/${Q_DONE})${q.correct + 1 >= Q_DONE ? " – kommt ins Archiv" : ""}` : "nicht richtig"}` : "");
 }
 range.oninput = () => setScore(range.value);
