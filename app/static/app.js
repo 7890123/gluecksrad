@@ -621,7 +621,7 @@ async function shuffle() {
 
 /* ---------------- Bewertung ---------------- */
 const dlg = $("#rateDlg"), range = $("#scoreRange");
-$("#quick").innerHTML = [100, 90, 80, 70, 60, 50, 40, 30, 20, 0].map(v => `<button class="btn" data-v="${v}">${v}</button>`).join("");
+$("#quick").innerHTML = [0, 20, 30, 40, 50, 60, 70, 80, 90, 100].map(v => `<button class="btn" data-v="${v}">${v}</button>`).join("");
 document.querySelectorAll("#quick button").forEach(b => b.onclick = () => { Sound.click(); setScore(+b.dataset.v); });
 // Ende einer neuen Pause: heute + 20 Tage, 5 Uhr früh (rechnet der Server genauso)
 const pauseEnd = () => { const d = new Date(); d.setHours(5, 0, 0, 0); d.setDate(d.getDate() + 20); return Math.floor(d / 1000); };
