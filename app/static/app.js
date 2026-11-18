@@ -114,7 +114,7 @@ async function openClass(id, subjectId) {
 function setCurrent(c) {
   if (!state.current || !c || state.current.id !== c.id || state.current.subject !== c.subject) state.histFilter = "";
   state.current = c;
-  $("#mTitle").textContent = c ? c.name : "Glücksrad";
+  $("#mTitle").textContent = c ? c.name : "LRM";
   store.set("lastSubject:" + c.id, c.subject);
   applyTurbo();
   const s = state.classes.find(x => x.id === c.id);

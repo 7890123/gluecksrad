@@ -1,4 +1,7 @@
-# Glücksrad für Schulklassen – v2
+# LRM – Lesson Recap Management
+
+Wiederholung im Unterricht: Ziehung per Glücksrad, Karteikarte, Slotmachine oder Glaskugel – mit Bewertung, Fragen, Fächern und Teamteaching.
+(Projekt- und Containername bleiben `gluecksrad`.)
 
 ## Starten
 

@@ -6,10 +6,10 @@
 <meta name="theme-color" content="#0a0d18">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Glücksrad">
+<meta name="apple-mobile-web-app-title" content="LRM">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
-<title>Glücksrad – Klassen</title>
+<title>LRM – Lesson Recap Management</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="icon" type="image/png" href="favicon.png">
@@ -19,7 +19,7 @@
 <div class="auth" id="authScreen" hidden>
   <form class="glass authcard" id="authForm">
     <div class="authlogo"><img src="logo.png" alt=""></div>
-    <div class="brand" style="justify-content:center">Glücksrad</div>
+    <div class="brand big" style="justify-content:center"><span class="lrm"><b>LRM</b><small>Lesson Recap Management</small></span></div>
     <div class="tagline">Wer ist dran?</div>
     <div class="muted" id="authHint" style="text-align:center;margin:6px 0 18px">Bitte anmelden</div>
     <label class="label" for="authUser">Benutzername</label>
@@ -35,11 +35,11 @@
 <div class="app" id="appRoot" hidden>
   <header class="mobilebar glass">
     <button class="btn ghost icon" id="menuBtn" aria-label="Menü">☰</button>
-    <img src="logo.png" alt="" class="mlogo"><b id="mTitle">Glücksrad</b>
+    <img src="logo.png" alt="" class="mlogo"><b id="mTitle">LRM</b>
   </header>
   <div class="scrim" id="scrim"></div>
   <aside class="glass" id="drawer">
-    <div class="brand"><img class="logo" id="sideLogo" src="logo.png" alt="" title="Nicht so fest drücken!">Glücksrad</div>
+    <div class="brand"><img class="logo" id="sideLogo" src="logo.png" alt="" title="Nicht so fest drücken!"><span class="lrm"><b>LRM</b><small>Lesson Recap Management</small></span></div>
     <div class="label">Klassen</div>
     <ul class="classlist" id="classlist"></ul>
     <form id="newclass" class="row">

@@ -532,3 +532,14 @@ table.hist tr.absent td{color:var(--bad)} table.hist tr.absent a.stud{color:inhe
   font-size:calc(clamp(26px,6vw,48px) * var(--k,1))}
 .gfront .gtext{top:0}
 .gbottom .gtext{top:-100%}
+/* Wortmarke „LRM – Lesson Recap Management“ */
+.lrm{display:inline-flex;flex-direction:column;line-height:1;gap:4px}
+.lrm b{font-size:28px;font-weight:800;letter-spacing:.08em;
+  background:linear-gradient(100deg,var(--accent) 0%,var(--accent-2) 55%,var(--accent-3) 100%);-webkit-background-clip:text;background-clip:text;color:transparent;
+  filter:drop-shadow(0 3px 10px color-mix(in srgb,var(--accent) 35%,transparent))}
+.lrm small{font-size:9.5px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);
+  padding-top:4px;border-top:1px solid color-mix(in srgb,var(--accent) 45%,transparent)}
+.brand.big .lrm{align-items:center}
+.brand.big .lrm b{font-size:52px;letter-spacing:.1em}
+.brand.big .lrm small{font-size:12px;letter-spacing:.2em;padding-top:6px}
+.brand.big + .tagline{margin-top:10px}
