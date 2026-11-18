@@ -67,6 +67,8 @@ Update: `podman build --format docker -t gluecksrad .` und `systemctl --user res
   („✓ gezogen“); die Einträge bleiben, am nächsten Tag ist sie/er wieder dabei. „Überspringen“ zählt nicht.
 - **Spalte „Heute“** in der Namensliste: *abwesend* oder *schon dran* (außerhalb des Rads) nimmt jemanden für heute aus
   dem Rad, ebenso ein 🃏 Joker. Zurück auf „–“ holt die Person heute wieder ins Rad.
+  **🛡 freigestellt** (z. B. Förderunterricht) nimmt jemanden in diesem Fach **bis auf Widerruf** aus dem Rad – zurück mit „–“;
+  Beginn und Ende stehen im Verlauf.
   *Abwesend* wird im Verlauf mit Datum protokolliert (Statistik „Abwesend“, auch pro Schüler/in filterbar).
 - **🗂️ Karteikarte** (Knopf neben „Drehen“, pro Fach im Browser gemerkt): statt des Glücksrads wird eine Karte aus
   dem Stapel gezogen – gleiche Gewichtung (Anzahl der Einträge), Turbo beschleunigt auch das Blättern.

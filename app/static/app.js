@@ -70,8 +70,9 @@ const jokerToday = s => s.jokerDay === today();                       // Joker e
 // heute schon dran / abwesend / außerhalb des Rads dran -> heute nicht im Rad dieses Fachs
 const outToday = id => { const o = state.current && state.current.dayOut[id]; return o && o.day === today() ? o.reason : null; };
 const OUT_TODAY = { drawn: "✓ gezogen", absent: "abwesend", other: "schon dran" };
-const todayState = s => jokerToday(s) ? "joker" : outToday(s.id);   // Wert der Spalte „Heute“
-const notToday = s => jokerToday(s) || !!outToday(s.id);
+const isExempt = s => !!(state.current && state.current.exempt && state.current.exempt[s.id]);   // freigestellt, bis auf Widerruf
+const todayState = s => isExempt(s) ? "exempt" : jokerToday(s) ? "joker" : outToday(s.id);   // Wert der Spalte „Heute“
+const notToday = s => isExempt(s) || jokerToday(s) || !!outToday(s.id);
 const fmtDay = ts => new Date(ts * 1000).toLocaleDateString("de-AT", { day: "2-digit", month: "2-digit" });
 
 function studentIndex(id) { return state.current ? state.current.students.findIndex(s => s.id === id) : 0; }
@@ -227,14 +228,15 @@ function renderWheelTab() {
         </div>
         <div class="glass panel">
           <h3><span>Im Rad: ${poolSegments().length}</span><span class="muted" style="font-weight:400;font-size:13px">${c.students.length} SuS</span></h3>
-          ${c.students.length ? `<div class="poolhead"><span>Name</span><span class="th-today" title="Heute nicht im Rad: abwesend, außerhalb des Rads drangekommen oder schon gezogen – gilt nur heute">Heute</span><span class="th-count">Anzahl</span></div>` : ""}
+          ${c.students.length ? `<div class="poolhead"><span>Name</span><span class="th-today" title="Heute nicht im Rad: abwesend, außerhalb des Rads drangekommen oder schon gezogen – gilt nur heute. „🛡 freigestellt“ (z. B. Förderunterricht) gilt bis auf Widerruf.">Heute</span><span class="th-count">Anzahl</span></div>` : ""}
           ${c.students.length ? `<ul class="pool" data-key="${c.id}:${c.subject}">${c.students.map(s => `
             <li class="${counts[s.id] && !notToday(s) ? "" : "out"}"><span class="dot" style="background:${colorFor(s.id)}"></span>
-              <span class="n" title="${esc(s.name)}">${esc(s.name)}${c.pauses[s.id] ? `<small class="state" title="Kommt am ${fmtDay(c.pauses[s.id])} wieder einmal ins Rad">⏸ bis ${fmtDay(c.pauses[s.id])}</small>` : ""}</span>
-              <select class="today ${todayState(s) ? "on" : ""}" data-today="${s.id}" title="Heute nicht im Rad dieses Fachs (gilt nur heute)${s.jokers ? ` – noch ${s.jokers} Joker` : ""}">
+              <span class="n" title="${esc(s.name)}">${esc(s.name)}${c.pauses[s.id] ? `<small class="state" title="Kommt am ${fmtDay(c.pauses[s.id])} wieder einmal ins Rad">⏸ bis ${fmtDay(c.pauses[s.id])}</small>` : ""}${isExempt(s) ? `<small class="state exempt" title="Freigestellt seit ${fmtDay(c.exempt[s.id])} – bleibt so, bis in der Spalte „Heute“ wieder „–“ gewählt wird">🛡 seit ${fmtDay(c.exempt[s.id])}</small>` : ""}</span>
+              <select class="today ${todayState(s) ? "on" : ""}" data-today="${s.id}" title="Heute nicht im Rad dieses Fachs (gilt nur heute) – „freigestellt“ gilt bis auf Widerruf${s.jokers ? ` – noch ${s.jokers} Joker` : ""}">
                 <option value="">–</option>${Object.entries(OUT_TODAY).filter(([r]) => r !== "drawn" || todayState(s) === "drawn")
                   .map(([r, l]) => `<option value="${r}" ${todayState(s) === r ? "selected" : ""}>${l}</option>`).join("")}
-                ${s.jokers || jokerToday(s) ? `<option value="joker" ${todayState(s) === "joker" ? "selected" : ""}>🃏 Joker${jokerToday(s) ? "" : ` (${s.jokers})`}</option>` : ""}</select>
+                ${s.jokers || jokerToday(s) ? `<option value="joker" ${todayState(s) === "joker" ? "selected" : ""}>🃏 Joker${jokerToday(s) ? "" : ` (${s.jokers})`}</option>` : ""}
+                <option value="exempt" ${isExempt(s) ? "selected" : ""}>🛡 freigestellt</option></select>
               <button class="btn" data-d="-1" data-id="${s.id}" ${counts[s.id] ? "" : "disabled"}>−</button>
               <span class="badge">${counts[s.id] || 0}</span>
               <button class="btn" data-d="1" data-id="${s.id}">+</button></li>`).join("")}</ul>`
@@ -280,6 +282,14 @@ function renderWheelTab() {
   document.querySelectorAll(".pool [data-today]").forEach(sel => sel.onchange = async () => {
     const s = c.students.find(x => x.id === sel.dataset.today), v = sel.value;
     try {
+      if (v === "exempt") {
+        setCurrent(await api("PUT", subjUrl(`/students/${s.id}/exempt`), { on: true }));
+        toast(`🛡 ${s.name} ist in ${currentSubject().name} freigestellt – bis du wieder „–“ wählst`); return;
+      }
+      if (isExempt(s)) {
+        state.current = await api("PUT", subjUrl(`/students/${s.id}/exempt`), { on: false });
+        if (!v) { setCurrent(state.current); toast(`${s.name} ist wieder im Rad`); return; }
+      }
       if (v === "joker") { if (!await useJoker(s)) renderMain(); return; }
       if (jokerToday(s)) {
         if (!confirm(`Joker von ${s.name} zurücknehmen?`)) { renderMain(); return; }
@@ -975,6 +985,9 @@ function renderHistoryTab() {
     : h.type === "joker"
     ? `<tr><td class="nowrap">${fmt(h.ts)}${team && h.by ? `<div class="muted small">${esc(h.by)}</div>` : ""}</td>
         <td><a href="#" class="stud" data-stud="${h.studentId}">${esc(h.name)}</a></td><td colspan="3" class="muted">🃏 Joker eingesetzt – an dem Tag nicht im Rad dieses Fachs</td></tr>`
+    : h.type === "exempt"
+    ? `<tr class="${h.note === "on" ? "absent" : ""}"><td class="nowrap">${fmt(h.ts)}${team && h.by ? `<div class="muted small">${esc(h.by)}</div>` : ""}</td>
+        <td><a href="#" class="stud" data-stud="${h.studentId}">${esc(h.name)}</a></td><td colspan="3">${h.note === "on" ? "🛡 freigestellt – nicht im Rad dieses Fachs" : "✓ Freistellung aufgehoben – wieder im Rad"}</td></tr>`
     : h.type === "absent"
     ? `<tr class="absent"><td class="nowrap">${fmt(h.ts)}${team && h.by ? `<div class="muted small">${esc(h.by)}</div>` : ""}</td>
         <td><a href="#" class="stud" data-stud="${h.studentId}">${esc(h.name)}</a></td><td colspan="3">🚫 abwesend${h.note ? ` am ${absDay(h.note)}` : ""}</td></tr>`

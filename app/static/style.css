@@ -476,3 +476,4 @@ table.hist tr.absent td{color:var(--bad)} table.hist tr.absent a.stud{color:inhe
 .kcard.win{animation:kwin .7s cubic-bezier(.2,1.5,.4,1) forwards;box-shadow:0 0 0 4px rgba(255,220,120,.9),0 0 50px rgba(255,210,100,.7),0 18px 40px rgba(0,0,0,.35)}
 @keyframes kwin{from{transform:scale(.92)}to{transform:scale(1.06)}}
 .kcount{position:absolute;bottom:0;font-size:13px}
+.pool .n small.state.exempt{color:var(--accent)}

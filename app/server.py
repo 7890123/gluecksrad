@@ -127,6 +127,12 @@ CREATE TABLE IF NOT EXISTS subject_day_out (
     reason      TEXT NOT NULL,              -- drawn | absent | other
     PRIMARY KEY (subject_id, student_id)
 );
+CREATE TABLE IF NOT EXISTS subject_exempt (     -- freigestellt (z. B. Förderunterricht): nicht im Rad, bis auf Widerruf
+    subject_id  TEXT NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
+    student_id  TEXT NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+    since       INTEGER NOT NULL,
+    PRIMARY KEY (subject_id, student_id)
+);
 CREATE TABLE IF NOT EXISTS questions (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     subject_id  TEXT NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
@@ -424,13 +430,14 @@ def class_obj(con, cid, subj=None):
     pauses = {r[0]: r[1] for r in con.execute("SELECT student_id, until FROM subject_pause WHERE subject_id=?", (subj,))}
     day_out = {r[0]: {"day": r[1], "reason": r[2]} for r in con.execute(
         "SELECT student_id, day, reason FROM subject_day_out WHERE subject_id=?", (subj,))}
+    exempt = {r[0]: r[1] for r in con.execute("SELECT student_id, since FROM subject_exempt WHERE subject_id=?", (subj,))}
     questions = [{"id": r["id"], "text": r["text"], "sort": r["sort"], "correct": r["correct"], "done": r["done_at"],
                   "askedDay": r["asked_day"] or ""}
                  for r in con.execute("SELECT * FROM questions WHERE subject_id=? ORDER BY sort", (subj,))]
     turbo_last, normal_last, q_random = con.execute(
         "SELECT turbo_last, normal_last, q_random FROM subjects WHERE id=?", (subj,)).fetchone()
     return {"id": c["id"], "name": c["name"], "students": students, "subjects": subjects,
-            "subject": subj, "pool": read_pool(con, subj), "pauses": pauses, "dayOut": day_out, "history": history,
+            "subject": subj, "pool": read_pool(con, subj), "pauses": pauses, "dayOut": day_out, "exempt": exempt, "history": history,
             "questions": questions, "turboLast": -1 if turbo_last is None else turbo_last,
             "normalLast": -1 if normal_last is None else normal_last, "qRandom": bool(q_random)}
 
@@ -938,6 +945,20 @@ def route(con, method, parts, body, user):
         if reason == "absent":
             con.execute("INSERT INTO history (class_id, subject_id, ts, type, student_id, name, note, rated_by)"
                         " VALUES (?,?,?,'absent',?,?,?,?)", (cid, subj, int(time.time()), s["id"], s["name"], day, user["username"]))
+        return class_obj(con, cid, subj)
+
+    # ---- freistellen (pro Fach, bis auf Widerruf) – z. B. während Förderunterricht
+    if len(rest) == 4 and rest[0] == "subject" and rest[1] == "students" and rest[3] == "exempt" and method == "PUT":
+        s = get_student(con, cid, rest[2])
+        on = bool(body.get("on"))
+        was = con.execute("SELECT 1 FROM subject_exempt WHERE subject_id=? AND student_id=?", (need_subject(), s["id"])).fetchone()
+        if on and not was:
+            con.execute("INSERT INTO subject_exempt VALUES (?,?,?)", (subj, s["id"], int(time.time())))
+        elif not on and was:
+            con.execute("DELETE FROM subject_exempt WHERE subject_id=? AND student_id=?", (subj, s["id"]))
+        if bool(was) != on:
+            con.execute("INSERT INTO history (class_id, subject_id, ts, type, student_id, name, note, rated_by)"
+                        " VALUES (?,?,?,'exempt',?,?,?,?)", (cid, subj, int(time.time()), s["id"], s["name"], "on" if on else "off", user["username"]))
         return class_obj(con, cid, subj)
 
     if len(rest) == 2 and rest[0] == "students":
