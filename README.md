@@ -70,8 +70,9 @@ Update: `podman build --format docker -t gluecksrad .` und `systemctl --user res
   **🛡 freigestellt** (z. B. Förderunterricht) nimmt jemanden in diesem Fach **bis auf Widerruf** aus dem Rad – zurück mit „–“;
   Beginn und Ende stehen im Verlauf.
   *Abwesend* wird im Verlauf mit Datum protokolliert (Statistik „Abwesend“, auch pro Schüler/in filterbar).
-- **🗂️ Karteikarte** (Knopf neben „Drehen“, pro Fach im Browser gemerkt): statt des Glücksrads wird eine Karte aus
-  dem Stapel gezogen – gleiche Gewichtung (Anzahl der Einträge), Turbo beschleunigt auch das Blättern.
+- **Ansicht: 🎡 Rad · 🗂️ Karte · 🎰 Slot** (Umschalter unter „Drehen“, pro Fach im Browser gemerkt): Glücksrad,
+  Karteikarte aus dem Stapel oder Slotmachine mit drei Walzen (Hebel ziehen, alle bleiben auf demselben Namen stehen).
+  Gleiche Gewichtung (Anzahl der Einträge) und Regeln in allen drei Ansichten; Turbo beschleunigt auch Karten und Walzen.
 - **⚡ Turbo-Modus** (Knopf neben „Drehen“, pro Fach): Rad und Töne laufen 5× schneller, nach der Ziehung erscheint eine
   Frage aus dem **Fragenpool** des Fachs (Tab „Fragen“: eine Zeile pro Frage, neue unten anhängen) – der Reihe nach,
   „andere Frage ↻“ springt eine weiter. Bewertung im Turbo: **≥ 90 %** −1 Eintrag, **30–89 %** bleibt, **< 30 %** +1.

@@ -318,6 +318,7 @@ const Sound = (() => {
       });
     },
     pop() { play(t => tone(500, t, 0.15, { type: "sine", vol: 0.3, glideTo: 1100 })); },
+    clunk() { play(t => { tone(150, t, 0.12, { type: "square", vol: 0.12, glideTo: 70 }); tone(900, t, 0.03, { type: "triangle", vol: 0.08 }); }); },   // Walze rastet ein
     click() { play(t => tone(900, t, 0.05, { type: "triangle", vol: 0.08 })); },
 
     /** Vorschau: simuliert ein auslaufendes Rad (ca. 3 s) */

@@ -12,8 +12,13 @@ const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 // Turbo-Modus (pro Fach, im Browser gemerkt): Fragen aus dem Pool, Rad und Ton 5x schneller, eigene Schwellen
 const TURBO_SPEED = 5;
-// Karteikarten-Modus (pro Fach, im Browser gemerkt): statt des Rads wird eine Karte aus dem Stapel gezogen
-const isCard = () => !!state.current && store.get("card:" + state.current.subject) === "1";
+// Ansicht zum Ziehen (pro Fach, im Browser gemerkt): Glücksrad, Karteikarte oder Slotmachine – gleiche Gewichtung
+const VIEWS = { wheel: "🎡 Rad", card: "🗂️ Karte", slot: "🎰 Slot" };
+function viewMode() {
+  if (!state.current) return "wheel";
+  const v = store.get("view:" + state.current.subject);
+  return VIEWS[v] ? v : store.get("card:" + state.current.subject) === "1" ? "card" : "wheel";   // card: = alte Einstellung
+}
 const isTurbo = () => !!state.current && store.get("turbo:" + state.current.subject) === "1";
 const outcomeOf = s => isTurbo() ? (s >= 90 ? "removed" : s >= 30 ? "kept" : "added") : s >= 70 ? "removed" : s >= 50 ? "kept" : "added";
 const Q_DELAY = 10;            // Sekunden nach dem Ziehen, bis die Frage erscheint
@@ -201,20 +206,21 @@ function renderWheelTab() {
   $("#tab").innerHTML = `
     <div class="wheelwrap">
       <div class="glass wheelcard">
-        ${isCard() ? cardStageHtml() : `<div class="wheel" id="wheelBox"><div class="glow"></div>
+        ${viewMode() === "card" ? cardStageHtml() : viewMode() === "slot" ? slotStageHtml() : `<div class="wheel" id="wheelBox"><div class="glow"></div>
           <canvas id="wheel" width="1100" height="1100"></canvas>${POINTER_SVG}
           <button class="hub" id="hub" title="Drehen (Leertaste)"><img src="${SEASON().hub}" alt="Drehen"></button>
         </div>`}
         <div class="controls">
           <button class="btn" id="shuffleBtn" title="Reihenfolge im Rad zufällig mischen">🎲 Mischen</button>
-          <button class="btn primary" id="spin">${isCard() ? "🗂️ Karte ziehen" : SEASON().spin}</button>
+          <button class="btn primary" id="spin">${{ card: "🗂️ Karte ziehen", slot: "🎰 Spielen" }[viewMode()] || SEASON().spin}</button>
           <button class="btn" id="resetBtn" title="Jede/n genau einmal ins Rad">↺ Zurücksetzen</button>
           <button class="btn turbobtn ${isTurbo() ? "on" : ""}" id="turboBtn" title="Turbo: Fragen aus dem Pool der Reihe nach, Rad und Ton 5× schneller">⚡ Turbo</button>
-          <button class="btn cardbtn ${isCard() ? "on" : ""}" id="cardBtn" title="Karteikarte statt Glücksrad: eine Karte wird aus dem Stapel gezogen">🗂️ Karteikarte</button>
+          <div class="seg viewseg" title="Ansicht zum Ziehen – gleiche Gewichtung, gilt für dieses Fach in diesem Browser">${Object.entries(VIEWS)
+            .map(([v, l]) => `<button data-view="${v}" class="${viewMode() === v ? "on" : ""}">${l}</button>`).join("")}</div>
         </div>
         <div class="hint">${isTurbo()
           ? `<span><b>⚡ Turbo</b> · ${askable(true).length} Fragen heute offen</span><span><b class="g">≥ 90 %</b> −1</span><span><b class="m">30–89 %</b> bleibt</span><span><b class="r">&lt; 30 %</b> +1 im Rad</span>`
-          : `<span><b class="g">≥ 70 %</b> −1 (letzter → 20 Tage Pause)</span><span><b class="m">50–69 %</b> bleibt</span><span><b class="r">&lt; 50 %</b> +1 im Rad</span>`}<span>Leertaste = ${isCard() ? "ziehen" : "drehen"}</span></div>
+          : `<span><b class="g">≥ 70 %</b> −1 (letzter → 20 Tage Pause)</span><span><b class="m">50–69 %</b> bleibt</span><span><b class="r">&lt; 50 %</b> +1 im Rad</span>`}<span>Leertaste = ${viewMode() === "wheel" ? "drehen" : "ziehen"}</span></div>
       </div>
       <div class="side">
         ${last ? `<div class="glass panel"><h3>Zuletzt gezogen</h3>
@@ -250,12 +256,12 @@ function renderWheelTab() {
   setControls();
   $("#spin").onclick = spin; if ($("#hub")) $("#hub").onclick = spin;
   if ($("#kcard")) $("#kcard").onclick = spin;
-  $("#cardBtn").onclick = () => {
-    if (state.spinning || state.pendingRating) return;
-    const on = !isCard(); store.set("card:" + c.subject, on ? "1" : "0");
-    renderMain(); safe(() => { Sound.unlock(); on ? Sound.shuffle() : Sound.click(); });
-    toast(on ? "🗂️ Karteikarte statt Glücksrad" : "Glücksrad");
-  };
+  if ($("#lever")) $("#lever").onclick = spin;
+  document.querySelectorAll("[data-view]").forEach(b => b.onclick = () => {
+    if (state.spinning || state.pendingRating || b.dataset.view === viewMode()) return;
+    store.set("view:" + c.subject, b.dataset.view);
+    renderMain(); safe(() => { Sound.unlock(); Sound.click(); });
+  });
   $("#shuffleBtn").onclick = shuffle;
   $("#turboBtn").onclick = () => {
     if (state.spinning || state.pendingRating) return;
@@ -481,7 +487,8 @@ const safe = fn => { try { fn(); } catch (e) { console.warn(e); } };   // Ton-Fe
 
 function spin() {
   if (state.spinning || state.pendingRating || dlg.open || !state.current) return;
-  if (isCard()) return drawCard();
+  if (viewMode() === "card") return drawCard();
+  if (viewMode() === "slot") return drawSlot();
   const segs = poolSegments(), n = segs.length; if (!n) return;
   safe(() => { Sound.unlock(); Sound.spinStart(); });
   const buf = new Uint32Array(1); crypto.getRandomValues(buf);
@@ -581,6 +588,70 @@ function drawCard() {
       setTimeout(() => { state.pendingRating = false; openRating(segs[k], segs[k].pos); }, 900 / SP);
     }, Math.min(gap, 320));
   })();
+}
+/* ---------------- Slotmachine (statt Rad) ---------------- */
+const SLOT_REELS = 3;
+const slotRow = s => s ? `<div class="srow"><span class="sdot" style="background:${colorFor(s.id)}"></span><span>${esc(s.name)}</span></div>`
+  : `<div class="srow sq">🎰</div>`;
+function slotStageHtml() {
+  const segs = poolSegments(), n = segs.length;
+  const pick = () => n ? segs[Math.floor(Math.random() * n)] : null;
+  const empty = !n ? (state.current.pool.length ? "Alle waren heute dran" : "Keine Namen im Automaten") : "";
+  return `<div class="slotstage" id="slotStage">
+    <div class="slotmachine"><div class="slottop">🎰 JACKPOT 🎰</div>
+      <div class="reels">${Array.from({ length: SLOT_REELS }, (_, r) =>
+        `<div class="reel"><div class="strip" id="strip${r}">${slotRow(pick())}${n ? slotRow(null) : `<div class="srow sq small">${esc(empty)}</div>`}${slotRow(pick())}</div></div>`).join("")}
+        <div class="payline"></div></div>
+      <div class="kcount muted">${n} ${n === 1 ? "Los" : "Lose"} im Automaten</div><div class="slotwin" id="slotWin"></div></div>
+    <button class="lever" id="lever" title="Hebel ziehen (Leertaste)" ${n ? "" : "disabled"}><span class="knob"></span><span class="arm"></span></button></div>`;
+}
+// Drei Walzen laufen an und bleiben nacheinander stehen – alle auf demselben Namen (Jackpot)
+function drawSlot() {
+  const segs = poolSegments(), n = segs.length; if (!n || !$("#strip0")) return;
+  safe(() => { Sound.unlock(); Sound.shuffle(); });
+  const buf = new Uint32Array(1); crypto.getRandomValues(buf);
+  const k = buf[0] % n, win = segs[k], classId = state.current.id, subjId = state.current.subject;
+  const SP = isTurbo() ? TURBO_SPEED : 1;
+  state.spinning = true; state.winnerPos = null; state.drawn = null; setControls();
+  $("#slotStage").classList.remove("win");
+  const lever = $("#lever"); lever.classList.remove("pull"); void lever.offsetWidth; lever.classList.add("pull");
+  const pick = () => segs[Math.floor(Math.random() * n)];
+  const reels = Array.from({ length: SLOT_REELS }, (_, r) => {
+    const len = 26 + r * 10 + Math.floor(Math.random() * 4), rows = [];
+    for (let i = 0; i < len; i++) rows.push(pick());
+    rows[len - 2] = win;                         // Gewinner landet in der Mitte (Zeile 2 von 3 im Fenster)
+    if (n > 1 && rows[len - 3] === win) rows[len - 3] = segs[(k + 1) % n];
+    const strip = $("#strip" + r);
+    strip.innerHTML = rows.map(slotRow).join("");
+    strip.style.transform = "translateY(0)";
+    const rowH = strip.firstElementChild.offsetHeight || 64;   // Zeilenhöhe aus dem CSS (am Handy kleiner)
+    return { strip, rowH, dist: (len - 3) * rowH, dur: (1900 + r * 750 + (r === SLOT_REELS - 1 ? 700 : 0)) / SP, done: false, lastRow: 0 };
+  });
+  const t0 = performance.now(), ease = u => 1 - Math.pow(1 - u, 3.2);
+  (function frame(now) {
+    if (!$("#slotStage")) { state.spinning = false; setControls(); return; }
+    let all = true;
+    reels.forEach((R, r) => {
+      if (R.done) return;
+      const u = Math.min(1, (now - t0) / R.dur), y = R.dist * ease(u);
+      R.strip.style.transform = `translateY(${-y}px)`;
+      const row = Math.floor(y / R.rowH);
+      if (r === reels.findIndex(x => !x.done) && row !== R.lastRow) safe(() => Sound.tick(1 - u * 0.7));
+      R.lastRow = row;
+      if (u >= 1) { R.done = true; R.strip.parentNode.classList.add("stop"); safe(() => Sound.clunk()); } else all = false;
+    });
+    if (!all) return void requestAnimationFrame(frame);
+    state.spinning = false;
+    if (!state.current || state.current.id !== classId || state.current.subject !== subjId) { setControls(); return; }
+    $("#slotWin").textContent = "🎉 " + win.name; $("#slotStage").classList.add("win");
+    state.winnerPos = k; state.pendingRating = true;
+    safe(() => Sound.win()); safe(() => confetti(90, { x: innerWidth / 2, y: innerHeight * 0.35 }));
+    if (isHW()) bats(4);
+    if (isXmas()) snow(5000, 90);
+    if (isEaster()) bunnies(1);
+    setControls();
+    setTimeout(() => { state.pendingRating = false; openRating(win, win.pos); }, 900 / SP);
+  })(t0);
 }
 // Logo in der Radmitte: Propeller-Effekt
 let hubAngle = 0;
