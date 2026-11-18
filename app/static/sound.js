@@ -1,6 +1,6 @@
 /* Soundeffekte – Web-Audio-Synthese plus optional eigene Audiodateien (pro Benutzer am Server gespeichert). */
 const Sound = (() => {
-  let ctx = null, master = null, noiseBuf = null, roll = null, spinLoop = null;
+  let ctx = null, master = null, noiseBuf = null, roll = null, spinLoop = null, reel = null;
   let muted = false;
   try { muted = localStorage.getItem("muted") === "1"; } catch (e) {}
 
@@ -36,7 +36,7 @@ const Sound = (() => {
     clearTimeout(idleTimer);
     idleTimer = setTimeout(function check() {
       if (!ctx || ctx.state !== "running") return;
-      if (roll || spinLoop || performance.now() < aliveUntil) { idleTimer = setTimeout(check, 1000); return; }
+      if (roll || spinLoop || reel || performance.now() < aliveUntil) { idleTimer = setTimeout(check, 1000); return; }
       ctx.suspend().catch(() => {});
     }, Math.max(0, aliveUntil - performance.now()) + 50);
   }
@@ -235,7 +235,7 @@ const Sound = (() => {
       if (arrayBuffer && ac()) await decode(kind);
       return custom[kind] ? custom[kind].duration : null;
     },
-    toggle() { muted = !muted; try { localStorage.setItem("muted", muted ? "1" : "0"); } catch (e) {} if (muted) { this.rollStop(); this.spinStop(); } return muted; },
+    toggle() { muted = !muted; try { localStorage.setItem("muted", muted ? "1" : "0"); } catch (e) {} if (muted) { this.rollStop(); this.spinStop(); this.reelStop(); } return muted; },
     unlock() { ac(); },
 
     /** Drehbeginn / Geschwindigkeit / Ende – für lange eigene Dateien (Tonhöhe folgt der Geschwindigkeit) */
@@ -319,6 +319,62 @@ const Sound = (() => {
     },
     pop() { play(t => tone(500, t, 0.15, { type: "sine", vol: 0.3, glideTo: 1100 })); },
     clunk() { play(t => { tone(150, t, 0.12, { type: "square", vol: 0.12, glideTo: 70 }); tone(900, t, 0.03, { type: "triangle", vol: 0.08 }); }); },   // Walze rastet ein
+
+    /* ---------- Karteikarte: Papier ---------- */
+    cardShuffle() {   // Stapel wird gemischt: schnelles Papier-Rattern
+      play(t => { for (let i = 0; i < 14; i++) noise(t + i * 0.035, 0.04, { vol: 0.16, type: "highpass", freq: 2500 + Math.random() * 2500, q: 0.7, attack: 0.004 }); });
+    },
+    cardFlip(sp = 0.5) {   // eine Karte umblättern: Papier-Wischen + leises Klopfen
+      play(t => {
+        noise(t, 0.07 + 0.05 * (1 - sp), { vol: 0.12 + 0.12 * sp, type: "bandpass", freq: 3200, freqTo: 1800, q: 0.8, attack: 0.006 });
+        tone(180, t + 0.02, 0.05, { type: "sine", vol: 0.06 });
+      });
+    },
+    cardReveal() {   // Karte wird aufgedeckt: kräftiges Aufklatschen + heller Akkord
+      play(t => {
+        noise(t, 0.12, { vol: 0.35, type: "bandpass", freq: 1400, freqTo: 600, q: 0.7, attack: 0.003 });
+        tone(110, t, 0.12, { type: "sine", vol: 0.2 });
+        [784, 988, 1175, 1568].forEach((f, i) => tone(f, t + 0.08 + i * 0.06, 0.6, { type: "triangle", vol: 0.12 }));
+      });
+    },
+
+    /* ---------- Slotmachine: Motor, Walzen-Rasten, Jackpot ---------- */
+    reelStart() {
+      if (muted || !ac()) return;
+      this.reelStop();
+      const t = ctx.currentTime;
+      const s = ctx.createBufferSource(); s.buffer = noiseBuf; s.loop = true;
+      const f = ctx.createBiquadFilter(); f.type = "bandpass"; f.frequency.value = 1300; f.Q.value = 1.2;
+      const o = ctx.createOscillator(); o.type = "sawtooth"; o.frequency.value = 95;
+      const of = ctx.createBiquadFilter(); of.type = "lowpass"; of.frequency.value = 380;
+      const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.11, t + 0.15 / speed);
+      s.connect(f); f.connect(g); o.connect(of); of.connect(g); g.connect(master);
+      s.start(t); o.start(t);
+      reel = { s, o, f, g };
+    },
+    reelSpeed(sp) {   // 0..1 – Motor wird mit der Walze tiefer und leiser
+      if (!reel) return;
+      const t = ctx.currentTime;
+      reel.o.frequency.setTargetAtTime(45 + 60 * sp, t, 0.05);
+      reel.f.frequency.setTargetAtTime(450 + 900 * sp, t, 0.05);
+      reel.g.gain.setTargetAtTime(Math.max(0.015, 0.11 * sp), t, 0.05);
+    },
+    reelStop() {
+      if (!reel || !ctx) return;
+      const r = reel, t = ctx.currentTime; reel = null;
+      r.g.gain.cancelScheduledValues(t); r.g.gain.setTargetAtTime(0.0001, t, 0.04);
+      r.s.stop(t + 0.3); r.o.stop(t + 0.3);
+    },
+    slotTick(sp = 0.5) {   // Name rastet an der Gewinnlinie vorbei
+      play(t => { tone(1400 + 600 * sp, t, 0.025, { type: "square", vol: 0.035 + 0.04 * (1 - sp), filter: 3000 }); });
+    },
+    jackpot() {   // Glocken-Klingeln + Münzregen
+      play(t => {
+        for (let r = 0; r < 3; r++) [1046.5, 1318.5, 1568].forEach((f, i) => tone(f, t + r * 0.32 + i * 0.07, 0.5, { type: "sine", vol: 0.14 }));
+        for (let i = 0; i < 22; i++) tone(2400 + Math.random() * 2200, t + 0.25 + i * 0.045 + Math.random() * 0.02, 0.06, { type: "triangle", vol: 0.05 });
+        tone(2093, t + 1.05, 0.9, { type: "sine", vol: 0.12 });
+      });
+    },
     click() { play(t => tone(900, t, 0.05, { type: "triangle", vol: 0.08 })); },
 
     /** Vorschau: simuliert ein auslaufendes Rad (ca. 3 s) */

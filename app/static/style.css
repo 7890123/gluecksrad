@@ -484,17 +484,17 @@ table.hist tr.absent td{color:var(--bad)} table.hist tr.absent a.stud{color:inhe
   background:linear-gradient(180deg,#d4202f,#8f0f1c);box-shadow:inset 0 2px 0 rgba(255,255,255,.35),inset 0 -6px 0 rgba(0,0,0,.25),0 20px 50px rgba(0,0,0,.45);
   border:3px solid #f5c542}
 .slottop{text-align:center;font-weight:800;letter-spacing:.12em;color:#ffe27a;text-shadow:0 0 12px rgba(255,210,80,.8);margin-bottom:12px;font-size:20px}
-.reels{position:relative;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;padding:8px;border-radius:14px;background:#2a0a10;box-shadow:inset 0 4px 14px rgba(0,0,0,.7)}
+.reels{position:relative;display:grid;grid-template-columns:minmax(0,1fr);gap:8px;padding:8px;border-radius:14px;background:#2a0a10;box-shadow:inset 0 4px 14px rgba(0,0,0,.7)}
 .reel{height:192px;overflow:hidden;border-radius:10px;position:relative;
   background:linear-gradient(180deg,#bbb 0%,#fff 22%,#fff 78%,#bbb 100%)}
 .reel::after{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,rgba(0,0,0,.35),transparent 30%,transparent 70%,rgba(0,0,0,.35))}
 .strip{will-change:transform}
-.srow{height:64px;display:flex;align-items:center;justify-content:center;gap:6px;padding:0 6px;color:#151935;font-weight:800;font-size:clamp(13px,1.9vw,17px);
-  line-height:1.15;text-align:center;overflow:hidden}
-.srow span:last-child{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+.srow{height:64px;display:flex;align-items:center;justify-content:center;gap:12px;padding:0 14px;color:#151935;font-weight:800;font-size:calc(clamp(20px,4vw,34px) * var(--k,1));
+  letter-spacing:-.01em;white-space:nowrap;overflow:hidden}
+.srow span:last-child{overflow:hidden;text-overflow:ellipsis}
 .srow.sq{font-size:34px}
 .srow.sq.small{font-size:14px;color:#5f6688;white-space:normal;text-align:center}
-.sdot{flex:none;width:10px;height:10px;border-radius:50%}
+.sdot{flex:none;width:14px;height:14px;border-radius:50%}
 .payline{position:absolute;left:4px;right:4px;top:50%;height:66px;transform:translateY(-50%);border-radius:10px;pointer-events:none;
   border:3px solid rgba(255,214,90,.85);box-shadow:0 0 14px rgba(255,214,90,.5)}
 .slotstage.win .payline{animation:payglow .5s ease-in-out 4 alternate}
@@ -502,11 +502,6 @@ table.hist tr.absent td{color:var(--bad)} table.hist tr.absent a.stud{color:inhe
 .reel.stop{animation:reelstop .18s ease-out}
 @keyframes reelstop{50%{transform:translateY(4px)}}
 .slotmachine .kcount{left:0;right:0;bottom:8px;text-align:center;color:#ffd9de}
-.slotwin{position:absolute;left:0;right:0;bottom:4px;text-align:center;font-weight:800;font-size:clamp(20px,3.4vw,28px);color:#fff2b0;
-  text-shadow:0 0 14px rgba(255,210,80,.9);opacity:0;transform:scale(.8);transition:opacity .3s,transform .3s cubic-bezier(.2,1.5,.4,1)}
-.slotstage.win .slotwin{opacity:1;transform:none}
-.slotstage.win .kcount{opacity:0}
-.slotstage.win .slotmachine{padding-bottom:44px}
 .lever{flex:none;position:relative;width:34px;height:210px;border:0;background:none;cursor:pointer;padding:0}
 .lever:disabled{cursor:default;opacity:.5}
 .lever .arm{position:absolute;left:13px;top:26px;bottom:10px;width:8px;border-radius:4px;background:linear-gradient(90deg,#999,#eee,#999);transform-origin:50% 100%}

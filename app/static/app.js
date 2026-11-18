@@ -548,7 +548,7 @@ function cardStageHtml() {
 function drawCard() {
   const segs = poolSegments(), n = segs.length; if (!n) return;
   const card = $("#kcard"); if (!card) return;
-  safe(() => { Sound.unlock(); Sound.shuffle(); });
+  safe(() => { Sound.unlock(); Sound.cardShuffle(); });
   const buf = new Uint32Array(1); crypto.getRandomValues(buf);
   const k = buf[0] % n, classId = state.current.id, subjId = state.current.subject;
   const SP = isTurbo() ? TURBO_SPEED : 1;
@@ -573,14 +573,14 @@ function drawCard() {
     c.classList.remove("flip"); void c.offsetWidth; c.classList.add("flip");
     const s = seq[i];
     setTimeout(() => show(s), Math.min(gap * 0.45, 160));
-    safe(() => Sound.tick(1 - u * 0.8));
+    safe(() => Sound.cardFlip(1 - u * 0.8));
     if (++i < steps) return void setTimeout(next, gap);
     setTimeout(() => {   // gezogen
       state.spinning = false;
       if (!state.current || state.current.id !== classId || state.current.subject !== subjId) { setControls(); return; }
       const c2 = $("#kcard"); if (c2) c2.classList.add("win");
       state.winnerPos = k; state.pendingRating = true;
-      safe(() => Sound.win()); safe(() => confetti(70, { x: innerWidth / 2, y: innerHeight * 0.35 }));
+      safe(() => Sound.cardReveal()); safe(() => confetti(70, { x: innerWidth / 2, y: innerHeight * 0.35 }));
       if (isHW()) bats(4);
       if (isXmas()) snow(5000, 90);
       if (isEaster()) bunnies(1);
@@ -590,8 +590,8 @@ function drawCard() {
   })();
 }
 /* ---------------- Slotmachine (statt Rad) ---------------- */
-const SLOT_REELS = 3;
-const slotRow = s => s ? `<div class="srow"><span class="sdot" style="background:${colorFor(s.id)}"></span><span>${esc(s.name)}</span></div>`
+// lange Namen etwas kleiner, damit sie ganz in die Walze passen
+const slotRow = s => s ? `<div class="srow" style="--k:${Math.max(0.55, Math.min(1, 13 / s.name.length)).toFixed(2)}"><span class="sdot" style="background:${colorFor(s.id)}"></span><span>${esc(s.name)}</span></div>`
   : `<div class="srow sq">🎰</div>`;
 function slotStageHtml() {
   const segs = poolSegments(), n = segs.length;
@@ -599,16 +599,15 @@ function slotStageHtml() {
   const empty = !n ? (state.current.pool.length ? "Alle waren heute dran" : "Keine Namen im Automaten") : "";
   return `<div class="slotstage" id="slotStage">
     <div class="slotmachine"><div class="slottop">🎰 JACKPOT 🎰</div>
-      <div class="reels">${Array.from({ length: SLOT_REELS }, (_, r) =>
-        `<div class="reel"><div class="strip" id="strip${r}">${slotRow(pick())}${n ? slotRow(null) : `<div class="srow sq small">${esc(empty)}</div>`}${slotRow(pick())}</div></div>`).join("")}
+      <div class="reels"><div class="reel"><div class="strip" id="strip">${slotRow(pick())}${n ? slotRow(null) : `<div class="srow sq small">${esc(empty)}</div>`}${slotRow(pick())}</div></div>
         <div class="payline"></div></div>
-      <div class="kcount muted">${n} ${n === 1 ? "Los" : "Lose"} im Automaten</div><div class="slotwin" id="slotWin"></div></div>
+      <div class="kcount muted">${n} ${n === 1 ? "Los" : "Lose"} im Automaten</div></div>
     <button class="lever" id="lever" title="Hebel ziehen (Leertaste)" ${n ? "" : "disabled"}><span class="knob"></span><span class="arm"></span></button></div>`;
 }
-// Drei Walzen laufen an und bleiben nacheinander stehen – alle auf demselben Namen (Jackpot)
+// Die Walze läuft an, wird langsamer und rastet auf dem gezogenen Namen ein
 function drawSlot() {
-  const segs = poolSegments(), n = segs.length; if (!n || !$("#strip0")) return;
-  safe(() => { Sound.unlock(); Sound.shuffle(); });
+  const segs = poolSegments(), n = segs.length, strip = $("#strip"); if (!n || !strip) return;
+  safe(() => { Sound.unlock(); Sound.clunk(); Sound.reelStart(); });
   const buf = new Uint32Array(1); crypto.getRandomValues(buf);
   const k = buf[0] % n, win = segs[k], classId = state.current.id, subjId = state.current.subject;
   const SP = isTurbo() ? TURBO_SPEED : 1;
@@ -616,41 +615,36 @@ function drawSlot() {
   $("#slotStage").classList.remove("win");
   const lever = $("#lever"); lever.classList.remove("pull"); void lever.offsetWidth; lever.classList.add("pull");
   const pick = () => segs[Math.floor(Math.random() * n)];
-  const reels = Array.from({ length: SLOT_REELS }, (_, r) => {
-    const len = 26 + r * 10 + Math.floor(Math.random() * 4), rows = [];
-    for (let i = 0; i < len; i++) rows.push(pick());
-    rows[len - 2] = win;                         // Gewinner landet in der Mitte (Zeile 2 von 3 im Fenster)
-    if (n > 1 && rows[len - 3] === win) rows[len - 3] = segs[(k + 1) % n];
-    const strip = $("#strip" + r);
-    strip.innerHTML = rows.map(slotRow).join("");
-    strip.style.transform = "translateY(0)";
-    const rowH = strip.firstElementChild.offsetHeight || 64;   // Zeilenhöhe aus dem CSS (am Handy kleiner)
-    return { strip, rowH, dist: (len - 3) * rowH, dur: (1900 + r * 750 + (r === SLOT_REELS - 1 ? 700 : 0)) / SP, done: false, lastRow: 0 };
-  });
-  const t0 = performance.now(), ease = u => 1 - Math.pow(1 - u, 3.2);
+  const len = 44 + Math.floor(Math.random() * 6), rows = [];
+  for (let i = 0; i < len; i++) { let r; do { r = pick(); } while (n > 1 && r === rows[i - 1]); rows.push(r); }
+  rows[len - 2] = win;                         // Gewinner landet in der Mitte (Zeile 2 von 3 im Fenster)
+  if (n > 1 && rows[len - 3] === win) rows[len - 3] = segs[(k + 1) % n];
+  if (n > 1 && rows[len - 1] === win) rows[len - 1] = segs[(k + 1) % n];
+  strip.innerHTML = rows.map(slotRow).join("");
+  strip.style.transform = "translateY(0)";
+  const rowH = strip.firstElementChild.offsetHeight || 64;   // Zeilenhöhe aus dem CSS (am Handy kleiner)
+  const dist = (len - 3) * rowH, dur = 3800 / SP, t0 = performance.now(), ease = u => 1 - Math.pow(1 - u, 3.4);
+  let lastRow = 0;
   (function frame(now) {
-    if (!$("#slotStage")) { state.spinning = false; setControls(); return; }
-    let all = true;
-    reels.forEach((R, r) => {
-      if (R.done) return;
-      const u = Math.min(1, (now - t0) / R.dur), y = R.dist * ease(u);
-      R.strip.style.transform = `translateY(${-y}px)`;
-      const row = Math.floor(y / R.rowH);
-      if (r === reels.findIndex(x => !x.done) && row !== R.lastRow) safe(() => Sound.tick(1 - u * 0.7));
-      R.lastRow = row;
-      if (u >= 1) { R.done = true; R.strip.parentNode.classList.add("stop"); safe(() => Sound.clunk()); } else all = false;
-    });
-    if (!all) return void requestAnimationFrame(frame);
+    if (!$("#slotStage")) { safe(() => Sound.reelStop()); state.spinning = false; setControls(); return; }
+    const u = Math.min(1, (now - t0) / dur), y = dist * ease(u), row = Math.floor(y / rowH);
+    strip.style.transform = `translateY(${-y}px)`;
+    safe(() => Sound.reelSpeed(1 - u));
+    if (row !== lastRow) { lastRow = row; safe(() => Sound.slotTick(1 - u)); }
+    if (u < 1) return void requestAnimationFrame(frame);
+    safe(() => { Sound.reelStop(); Sound.clunk(); });
+    strip.parentNode.classList.add("stop");
     state.spinning = false;
     if (!state.current || state.current.id !== classId || state.current.subject !== subjId) { setControls(); return; }
-    $("#slotWin").textContent = "🎉 " + win.name; $("#slotStage").classList.add("win");
+    $("#slotStage").classList.add("win");
     state.winnerPos = k; state.pendingRating = true;
-    safe(() => Sound.win()); safe(() => confetti(90, { x: innerWidth / 2, y: innerHeight * 0.35 }));
+    setTimeout(() => safe(() => Sound.jackpot()), 150 / SP);
+    safe(() => confetti(90, { x: innerWidth / 2, y: innerHeight * 0.35 }));
     if (isHW()) bats(4);
     if (isXmas()) snow(5000, 90);
     if (isEaster()) bunnies(1);
     setControls();
-    setTimeout(() => { state.pendingRating = false; openRating(win, win.pos); }, 900 / SP);
+    setTimeout(() => { state.pendingRating = false; openRating(win, win.pos); }, 1100 / SP);
   })(t0);
 }
 // Logo in der Radmitte: Propeller-Effekt
