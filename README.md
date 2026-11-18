@@ -70,8 +70,10 @@ Update: `podman build --format docker -t gluecksrad .` und `systemctl --user res
   **🛡 freigestellt** (z. B. Förderunterricht) nimmt jemanden in diesem Fach **bis auf Widerruf** aus dem Rad – zurück mit „–“;
   Beginn und Ende stehen im Verlauf.
   *Abwesend* wird im Verlauf mit Datum protokolliert (Statistik „Abwesend“, auch pro Schüler/in filterbar).
-- **Ansicht: 🎡 Rad · 🗂️ Karte · 🎰 Slot** (Umschalter unter „Drehen“, pro Fach im Browser gemerkt): Glücksrad,
-  Karteikarte aus dem Stapel oder Slotmachine mit einer Walze (Hebel ziehen). Jede Ansicht hat eigene Töne
+- **Ansicht: 🎡 Rad · 🗂️ Karte · 🎰 Slot · 🔮 Glas** (Umschalter unter „Drehen“, pro Fach im Browser gemerkt): Glücksrad,
+  Karteikarte aus dem Stapel, Slotmachine mit einer Walze (Hebel ziehen) oder **Glaskugel-Ziehung**: gefaltete Zettel
+  liegen in einer Glaskugel (ein Zettel pro Eintrag, der heute ziehbar ist), ein Greifarm holt einen heraus, vor der
+  Kamera wird er aufgefaltet; „Mischen“ rührt mit einem Kochlöffel um. Gedacht für Klassen mit ca. 30–35 Personen. Jede Ansicht hat eigene Töne
   (Rad: einstellbares Klicken + Gewinner-Sound · Karte: Papier-Blättern · Slot: Motor, Einrasten, Jackpot-Glocken).
   Gleiche Gewichtung (Anzahl der Einträge) und Regeln in allen drei Ansichten; Turbo beschleunigt auch Karten und Walze.
 - **⚡ Turbo-Modus** (Knopf neben „Drehen“, pro Fach): Rad und Töne laufen 5× schneller, nach der Ziehung erscheint eine

@@ -13,7 +13,7 @@ const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;"
 // Turbo-Modus (pro Fach, im Browser gemerkt): Fragen aus dem Pool, Rad und Ton 5x schneller, eigene Schwellen
 const TURBO_SPEED = 5;
 // Ansicht zum Ziehen (pro Fach, im Browser gemerkt): Glücksrad, Karteikarte oder Slotmachine – gleiche Gewichtung
-const VIEWS = { wheel: "🎡 Rad", card: "🗂️ Karte", slot: "🎰 Slot" };
+const VIEWS = { wheel: "🎡 Rad", card: "🗂️ Karte", slot: "🎰 Slot", glass: "🔮 Glas" };
 function viewMode() {
   if (!state.current) return "wheel";
   const v = store.get("view:" + state.current.subject);
@@ -206,13 +206,13 @@ function renderWheelTab() {
   $("#tab").innerHTML = `
     <div class="wheelwrap">
       <div class="glass wheelcard">
-        ${viewMode() === "card" ? cardStageHtml() : viewMode() === "slot" ? slotStageHtml() : `<div class="wheel" id="wheelBox"><div class="glow"></div>
+        ${viewMode() === "card" ? cardStageHtml() : viewMode() === "slot" ? slotStageHtml() : viewMode() === "glass" ? glassStageHtml() : `<div class="wheel" id="wheelBox"><div class="glow"></div>
           <canvas id="wheel" width="1100" height="1100"></canvas>${POINTER_SVG}
           <button class="hub" id="hub" title="Drehen (Leertaste)"><img src="${SEASON().hub}" alt="Drehen"></button>
         </div>`}
         <div class="controls">
           <button class="btn" id="shuffleBtn" title="Reihenfolge im Rad zufällig mischen">🎲 Mischen</button>
-          <button class="btn primary" id="spin">${{ card: "🗂️ Karte ziehen", slot: "🎰 Spielen" }[viewMode()] || SEASON().spin}</button>
+          <button class="btn primary" id="spin">${{ card: "🗂️ Karte ziehen", slot: "🎰 Spielen", glass: "🔮 Zettel ziehen" }[viewMode()] || SEASON().spin}</button>
           <button class="btn" id="resetBtn" title="Jede/n genau einmal ins Rad">↺ Zurücksetzen</button>
           <button class="btn turbobtn ${isTurbo() ? "on" : ""}" id="turboBtn" title="Turbo: Fragen aus dem Pool der Reihe nach, Rad und Ton 5× schneller">⚡ Turbo</button>
           <div class="seg viewseg" title="Ansicht zum Ziehen – gleiche Gewichtung, gilt für dieses Fach in diesem Browser">${Object.entries(VIEWS)
@@ -257,6 +257,7 @@ function renderWheelTab() {
   $("#spin").onclick = spin; if ($("#hub")) $("#hub").onclick = spin;
   if ($("#kcard")) $("#kcard").onclick = spin;
   if ($("#lever")) $("#lever").onclick = spin;
+  if ($("#glassCv")) glassMount();
   document.querySelectorAll("[data-view]").forEach(b => b.onclick = () => {
     if (state.spinning || state.pendingRating || b.dataset.view === viewMode()) return;
     store.set("view:" + c.subject, b.dataset.view);
@@ -489,6 +490,7 @@ function spin() {
   if (state.spinning || state.pendingRating || dlg.open || !state.current) return;
   if (viewMode() === "card") return drawCard();
   if (viewMode() === "slot") return drawSlot();
+  if (viewMode() === "glass") return drawGlass();
   const segs = poolSegments(), n = segs.length; if (!n) return;
   safe(() => { Sound.unlock(); Sound.spinStart(); });
   const buf = new Uint32Array(1); crypto.getRandomValues(buf);
@@ -647,6 +649,241 @@ function drawSlot() {
     setTimeout(() => { state.pendingRating = false; openRating(win, win.pos); }, 1100 / SP);
   })(t0);
 }
+/* ---------------- Glaskugel-Ziehung (statt Rad) ---------------- */
+// Pseudo-3D auf einem Canvas: Zettel (einer pro Eintrag im Rad) liegen in einer Glaskugel und werden mit einfacher
+// Physik simuliert. Ein Greifarm holt einen Zettel heraus, der vor der „Kamera“ aufgefaltet wird; „Mischen“ rührt mit
+// einem Kochlöffel um. Die Simulation läuft nur, solange sich etwas bewegt (sonst kein Dauer-Rechnen im Leerlauf).
+const GL = { W: 1000, cx: 500, cy: 560, R: 330, D: 1600, SW: 96, SH: 54, NECK: 105 };
+let G = null;   // { key, slips, tweens, claw, spoon, held, raf, calm }
+const glassProj = (x, y, z) => { const f = GL.D / (GL.D + z); return { x: GL.cx + x * f, y: GL.cy + y * f, f }; };
+
+function glassStageHtml() {
+  const n = poolSegments().length;
+  const empty = !n ? (state.current.pool.length ? "Alle waren heute dran" : "Das Glas ist leer") : "";
+  return `<div class="glassstage" id="glassStage"><canvas id="glassCv" width="${GL.W}" height="${GL.W}"></canvas>
+    ${empty ? `<div class="glassempty">${esc(empty)}</div>` : ""}
+    <div class="kcount muted">${n} ${n === 1 ? "Zettel" : "Zettel"} im Glas</div></div>`;
+}
+function glassNewSlip(sid, drop) {
+  const R = GL.R * 0.8, a = Math.random() * TAU, r = Math.sqrt(Math.random()) * R * 0.6;
+  return { sid, x: Math.cos(a) * r, z: Math.sin(a) * r, y: drop ? -GL.R * 0.5 - Math.random() * 120 : GL.R * (0.2 + Math.random() * 0.5),
+    vx: (Math.random() - .5) * 80, vy: drop ? 0 : -60, vz: (Math.random() - .5) * 80,
+    rot: Math.random() * TAU, vr: (Math.random() - .5) * 4, tilt: Math.random() * Math.PI, shade: 0.9 + Math.random() * 0.1 };
+}
+// Zettel im Glas an die aktuelle Liste anpassen (pro Schüler/in so viele Zettel wie Einträge, die heute ziehbar sind)
+function glassMount() {
+  const cv = $("#glassCv"); if (!cv || !state.current) return;
+  const key = state.current.id + ":" + state.current.subject;
+  const fresh = !G || G.key !== key;
+  if (fresh) G = { key, slips: [], tweens: [], claw: null, spoon: null, held: null, raf: null, calm: 0 };
+  G.cv = cv;
+  if (state.drawn || dlg.open) return wakeGlass();   // während der Bewertung nichts umsortieren
+  const old = $("#glassStage .gslip"); if (old) old.remove();
+  G.held = null; G.claw = null;
+  const want = {}; poolSegments().forEach(s => want[s.id] = (want[s.id] || 0) + 1);
+  const have = {};
+  G.slips = G.slips.filter(sl => { have[sl.sid] = (have[sl.sid] || 0) + 1; return have[sl.sid] <= (want[sl.sid] || 0); });
+  for (const [sid, n] of Object.entries(want)) for (let i = have[sid] || 0; i < n; i++) G.slips.push(glassNewSlip(sid, !fresh));
+  wakeGlass();
+}
+function wakeGlass() { if (G && !G.raf) { G.calm = 0; G.last = performance.now(); G.raf = requestAnimationFrame(glassLoop); } }
+// kleine Zeitleiste: tween(dauer ms, fn(u)) -> Promise
+function tween(ms, fn) { return new Promise(res => { G.tweens.push({ t0: performance.now(), ms: Math.max(1, ms), fn, res }); wakeGlass(); }); }
+const easeIO = u => u < .5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2;
+
+function glassStep(dt) {
+  const R = GL.R - 30, sl = G.slips, n = sl.length, g = 1700, sep = 46;
+  for (const p of sl) {
+    p.vy += g * dt;
+    p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
+    p.rot += p.vr * dt; p.vr *= 0.985;
+    const d = Math.hypot(p.x, p.y, p.z);
+    if (d > R) {
+      const nx = p.x / d, ny = p.y / d, nz = p.z / d, vn = p.vx * nx + p.vy * ny + p.vz * nz;
+      p.x = nx * R; p.y = ny * R; p.z = nz * R;
+      if (vn > 0) { p.vx -= 1.3 * vn * nx; p.vy -= 1.3 * vn * ny; p.vz -= 1.3 * vn * nz; p.vx *= .82; p.vy *= .82; p.vz *= .82; p.vr *= .8; }
+    }
+  }
+  for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) {
+    const a = sl[i], b = sl[j], dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z, d2 = dx * dx + dy * dy + dz * dz;
+    if (d2 >= sep * sep || d2 === 0) continue;
+    const d = Math.sqrt(d2), push = (sep - d) / 2, ux = dx / d, uy = dy / d, uz = dz / d;
+    a.x -= ux * push; a.y -= uy * push; a.z -= uz * push; b.x += ux * push; b.y += uy * push; b.z += uz * push;
+    const rv = (b.vx - a.vx) * ux + (b.vy - a.vy) * uy + (b.vz - a.vz) * uz;
+    if (rv < 0) { const k = rv * 0.5; a.vx += ux * k; a.vy += uy * k; a.vz += uz * k; b.vx -= ux * k; b.vy -= uy * k; b.vz -= uz * k; }
+  }
+  // Kochlöffel schiebt die Zettel im Kreis und wirbelt sie auf
+  if (G.spoon && G.spoon.stir) {
+    const s = G.spoon;
+    for (const p of sl) {
+      const dx = p.x - s.x, dy = p.y - s.y, dz = p.z - s.z, d = Math.hypot(dx, dy, dz);
+      if (d > 220 || d === 0) continue;
+      const k = (1 - d / 220) * dt;
+      p.vx += (dx / d * 900 + s.tx * 1800) * k; p.vz += (dz / d * 900 + s.tz * 1800) * k; p.vy -= 1900 * k;
+      p.vr += (Math.random() - .5) * 20 * k;
+    }
+  }
+  let vmax = 0;
+  for (const p of sl) { p.vx *= .996; p.vz *= .996; vmax = Math.max(vmax, Math.abs(p.vx) + Math.abs(p.vy) + Math.abs(p.vz)); }
+  return vmax;
+}
+function glassLoop(now) {
+  if (!G || !G.cv || !G.cv.isConnected) { if (G) G.raf = null; return; }
+  const elapsed = Math.min(0.05, (now - G.last) / 1000); G.last = now;
+  const steps = Math.max(1, Math.round(elapsed / (1 / 120)));
+  let vmax = 0;
+  for (let i = 0; i < steps; i++) vmax = glassStep(elapsed / steps);
+  G.tweens = G.tweens.filter(t => { const u = Math.min(1, (now - t.t0) / t.ms); t.fn(u); if (u >= 1) { t.res(); return false; } return true; });
+  drawGlass2d();
+  G.calm = vmax < 25 && !G.tweens.length ? G.calm + 1 : 0;
+  G.raf = G.calm > 45 ? null : requestAnimationFrame(glassLoop);
+}
+
+function drawSlip2d(ctx, p, x, y, f, held) {
+  const w = GL.SW * f, h = GL.SH * f * (0.45 + 0.55 * Math.abs(Math.cos(p.tilt))), depth = held ? 1 : Math.min(1, Math.max(.6, 1 - p.z / 900));
+  ctx.save(); ctx.translate(x, y); ctx.rotate(p.rot);
+  const l = Math.round(232 * p.shade * depth), col = `rgb(${l + 18},${l + 14},${l - 6})`;
+  ctx.fillStyle = col; ctx.strokeStyle = "rgba(90,70,40,.35)"; ctx.lineWidth = 1.2;
+  ctx.beginPath(); ctx.moveTo(-w / 2, -h / 2); ctx.lineTo(w / 2, -h / 2 + 2 * f); ctx.lineTo(w / 2 - 2 * f, h / 2); ctx.lineTo(-w / 2 + 1 * f, h / 2 - 1 * f); ctx.closePath();
+  ctx.fill(); ctx.stroke();
+  ctx.strokeStyle = "rgba(120,100,60,.35)"; ctx.beginPath(); ctx.moveTo(-w / 2 + 3 * f, 0); ctx.lineTo(w / 2 - 3 * f, 1 * f); ctx.stroke();   // Faltkante
+  ctx.restore();
+}
+function drawClaw(ctx, c) {
+  const p = glassProj(c.x, c.y, c.z), f = p.f, o = c.open;
+  const hy = p.y - 46 * f;
+  const metal = ctx.createLinearGradient(p.x - 8, 0, p.x + 8, 0); metal.addColorStop(0, "#8a93a6"); metal.addColorStop(.5, "#eef1f7"); metal.addColorStop(1, "#7a8396");
+  ctx.fillStyle = metal; ctx.fillRect(p.x - 6 * f, -10, 12 * f, hy + 10);
+  ctx.fillStyle = "#c7302f"; ctx.beginPath(); ctx.roundRect(p.x - 30 * f, hy - 14 * f, 60 * f, 26 * f, 8 * f); ctx.fill();
+  ctx.strokeStyle = "#cfd5e2"; ctx.lineWidth = 7 * f; ctx.lineCap = "round";
+  for (const side of [-1, 0, 1]) {
+    const sx = p.x + side * 18 * f, ex = p.x + side * (6 + 30 * o) * f + (side === 0 ? (o - .5) * 8 * f : 0), ey = p.y + (side === 0 ? -4 : 6) * f;
+    ctx.beginPath(); ctx.moveTo(sx, hy + 10 * f);
+    ctx.quadraticCurveTo(p.x + side * (22 + 30 * o) * f, hy + 30 * f, ex, ey);
+    ctx.lineTo(ex - side * 9 * f, ey + 6 * f); ctx.stroke();
+  }
+}
+function drawSpoon(ctx, s) {
+  const tip = glassProj(s.x, s.y, s.z), end = { x: tip.x + s.lean * 220, y: -40 };
+  const wood = ctx.createLinearGradient(tip.x, tip.y, end.x, end.y); wood.addColorStop(0, "#b67a3c"); wood.addColorStop(1, "#d9a061");
+  ctx.strokeStyle = wood; ctx.lineWidth = 16 * tip.f; ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(tip.x, tip.y - 20 * tip.f); ctx.lineTo(end.x, end.y); ctx.stroke();
+  ctx.fillStyle = "#c48848"; ctx.strokeStyle = "rgba(90,50,20,.5)"; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.ellipse(tip.x, tip.y, 26 * tip.f, 40 * tip.f, Math.atan2(end.x - tip.x, tip.y - end.y), 0, TAU); ctx.fill(); ctx.stroke();
+}
+function drawGlass2d() {
+  const cv = G.cv, ctx = cv.getContext("2d"), { W, cx, cy, R, NECK } = GL, Rs = R * 1.03;
+  ctx.clearRect(0, 0, W, W);
+  // Schatten, Rückseite des Glases
+  ctx.fillStyle = "rgba(0,0,0,.28)"; ctx.beginPath(); ctx.ellipse(cx, cy + Rs + 18, Rs * .78, 26, 0, 0, TAU); ctx.fill();
+  const back = ctx.createRadialGradient(cx - R * .25, cy - R * .3, R * .1, cx, cy, Rs);
+  back.addColorStop(0, "rgba(200,230,255,.10)"); back.addColorStop(.8, "rgba(150,200,255,.16)"); back.addColorStop(1, "rgba(170,215,255,.36)");
+  ctx.fillStyle = back; ctx.beginPath(); ctx.arc(cx, cy, Rs, 0, TAU); ctx.fill();
+  // Zettel (hinten zuerst), Greifarm und Löffel
+  const items = G.slips.map(p => ({ p, z: p.z }));
+  items.sort((a, b) => b.z - a.z);
+  for (const { p } of items) { const q = glassProj(p.x, p.y, p.z); drawSlip2d(ctx, p, q.x, q.y, q.f); }
+  if (G.claw) drawClaw(ctx, G.claw);
+  if (G.held) { const c = G.claw, q = glassProj(c.x, c.y + 8, c.z); drawSlip2d(ctx, G.held, q.x, q.y, q.f, true); }
+  if (G.spoon) drawSpoon(ctx, G.spoon);
+  // Vorderseite: Rand, Glanzlichter, Hals mit Öffnung
+  ctx.lineWidth = 5; ctx.strokeStyle = "rgba(220,240,255,.55)";
+  ctx.beginPath(); ctx.arc(cx, cy, Rs, -Math.PI / 2 + .36, -Math.PI / 2 - .36 + TAU); ctx.stroke();
+  ctx.lineWidth = 22; ctx.strokeStyle = "rgba(255,255,255,.20)"; ctx.lineCap = "round";
+  ctx.beginPath(); ctx.arc(cx, cy, Rs * .86, Math.PI * 1.08, Math.PI * 1.42); ctx.stroke();
+  ctx.fillStyle = "rgba(255,255,255,.55)"; ctx.beginPath(); ctx.ellipse(cx - R * .5, cy - R * .52, 26, 12, -.7, 0, TAU); ctx.fill();
+  const ny = cy - Math.sqrt(Rs * Rs - NECK * NECK);
+  const neck = ctx.createLinearGradient(cx - NECK, 0, cx + NECK, 0);
+  neck.addColorStop(0, "rgba(170,215,255,.40)"); neck.addColorStop(.3, "rgba(255,255,255,.12)"); neck.addColorStop(1, "rgba(170,215,255,.35)");
+  ctx.fillStyle = neck; ctx.fillRect(cx - NECK, ny - 60, NECK * 2, 62);
+  ctx.strokeStyle = "rgba(220,240,255,.6)"; ctx.lineWidth = 4;
+  ctx.beginPath(); ctx.moveTo(cx - NECK, ny + 2); ctx.lineTo(cx - NECK, ny - 60); ctx.moveTo(cx + NECK, ny + 2); ctx.lineTo(cx + NECK, ny - 60); ctx.stroke();
+  ctx.beginPath(); ctx.ellipse(cx, ny - 60, NECK, 20, 0, 0, TAU); ctx.stroke();
+}
+
+// Greifarm: durch den Hals hinunter, Zettel greifen, wieder hinauf – dann wird der Zettel vor der Kamera aufgefaltet
+async function drawGlass() {
+  const segs = poolSegments(), n = segs.length; if (!n || !G || !$("#glassCv")) return;
+  const buf = new Uint32Array(1); crypto.getRandomValues(buf);
+  const k = buf[0] % n, win = segs[k], classId = state.current.id, subjId = state.current.subject;
+  const SP = isTurbo() ? TURBO_SPEED : 1, T = ms => ms / SP;
+  const slip = G.slips.filter(p => p.sid === win.id).sort((a, b) => a.y - b.y)[0];   // oberster Zettel dieser Person
+  if (!slip) return;
+  state.spinning = true; state.winnerPos = null; state.drawn = null; setControls();
+  safe(() => { Sound.unlock(); Sound.reelStart(); });
+  const top = -GL.R - 420, neckY = -GL.R + 30;
+  G.claw = { x: 0, y: top, z: 0, open: 0 };
+  const move = (to, ms, open) => { const c = G.claw, from = { ...c }; return tween(ms, u => { const e = easeIO(u);
+    c.x = from.x + (to.x - from.x) * e; c.y = from.y + (to.y - from.y) * e; c.z = from.z + (to.z - from.z) * e;
+    if (open !== undefined) c.open = from.open + (open - from.open) * e; safe(() => Sound.reelSpeed(Math.sin(Math.PI * u))); }); };
+  try {
+    await move({ x: 0, y: neckY, z: 0 }, T(900), 1);
+    await move({ x: slip.x, y: slip.y - 70, z: slip.z }, T(800));
+    await move({ x: slip.x, y: slip.y - 6, z: slip.z }, T(450));
+    safe(() => { Sound.reelStop(); Sound.clunk(); });
+    await tween(T(260), u => G.claw.open = 1 - u);
+    G.slips = G.slips.filter(p => p !== slip); G.held = slip;
+    slip.vr = 0; slip.tilt = 0;
+    safe(() => Sound.reelStart());
+    await move({ x: 0, y: neckY - 40, z: 0 }, T(800));
+    await move({ x: 0, y: top + 180, z: -200 }, T(700));
+    safe(() => Sound.reelStop());
+  } catch (e) { console.warn(e); }
+  state.spinning = false;
+  if (!state.current || state.current.id !== classId || state.current.subject !== subjId || !$("#glassStage")) { setControls(); return; }
+  // Zettel fliegt nach vorne und wird aufgefaltet
+  const stage = $("#glassStage"), c = G.claw, q = glassProj(c.x, c.y + 8, c.z);
+  const el = document.createElement("div");
+  el.className = "gslip";
+  el.style.setProperty("--k", Math.max(0.55, Math.min(1, 12 / win.name.length)).toFixed(2));
+  el.innerHTML = `<div class="ghalf gbottom"><div class="gtext">${esc(win.name)}</div></div>
+    <div class="ghalf gtop"><div class="gface gfront"><div class="gtext">${esc(win.name)}</div></div><div class="gface gback"></div></div>`;
+  el.style.left = (q.x / GL.W * 100) + "%"; el.style.top = (q.y / GL.W * 100) + "%";
+  el.style.transform = "translate(-50%,-50%) scale(.16) rotate(-12deg)";
+  stage.appendChild(el);
+  G.held = null; G.claw = null; wakeGlass();
+  void el.offsetWidth;
+  el.style.transition = `left ${T(600)}ms ease, top ${T(600)}ms ease, transform ${T(600)}ms cubic-bezier(.2,1.2,.4,1)`;
+  el.style.left = "50%"; el.style.top = "44%"; el.style.transform = "translate(-50%,-50%) scale(1)";
+  safe(() => Sound.cardFlip(1));
+  state.pendingRating = true; setControls();
+  setTimeout(() => {
+    el.style.setProperty("--unfold", T(700) + "ms"); el.classList.add("open");
+    safe(() => Sound.cardReveal()); safe(() => confetti(70, { x: innerWidth / 2, y: innerHeight * 0.35 }));
+    if (isHW()) bats(4);
+    if (isXmas()) snow(5000, 90);
+    if (isEaster()) bunnies(1);
+  }, T(650));
+  setTimeout(() => { state.winnerPos = k; state.pendingRating = false; openRating(win, win.pos); }, T(650) + T(700) + 1200);
+}
+
+// Mischen: ein Kochlöffel fährt durch den Hals und rührt die Zettel um
+async function glassStir() {
+  if (!G || !$("#glassCv")) return;
+  const c = state.current; safe(() => { Sound.unlock(); Sound.cardShuffle(); });
+  state.spinning = true; setControls();
+  const SP = isTurbo() ? TURBO_SPEED : 1, top = -GL.R - 380, r = GL.R * .36, cyS = GL.R * .66;
+  G.spoon = { x: 0, y: top, z: 0, lean: .35, stir: false, tx: 0, tz: 0 };
+  try {
+    const req = api("POST", subjUrl("/shuffle"));
+    await tween(500 / SP, u => { const e = easeIO(u); G.spoon.y = top + (cyS - top) * e; G.spoon.x = r * e; });
+    G.spoon.stir = true;
+    let lastQ = 0;
+    await tween(2400 / SP, u => {
+      const a = u * TAU * 2.5, s = G.spoon;
+      s.x = Math.cos(a) * r; s.z = Math.sin(a) * r * .9; s.tx = -Math.sin(a); s.tz = Math.cos(a); s.lean = .35 + Math.cos(a) * .15;
+      const q = Math.floor(u * 10); if (q !== lastQ) { lastQ = q; safe(() => Sound.cardShuffle()); }
+    });
+    G.spoon.stir = false;
+    const from = { ...G.spoon };
+    await tween(500 / SP, u => { const e = easeIO(u); G.spoon.y = from.y + (top - from.y) * e; G.spoon.x = from.x * (1 - e); G.spoon.z = from.z * (1 - e); });
+    G.spoon = null; wakeGlass();
+    const c2 = await req;
+    if (state.current && state.current.id === c2.id && state.current.subject === c2.subject) state.current = c2;
+    toast("Zettel gemischt");
+  } catch (e) { console.warn(e); G.spoon = null; }
+  finally { state.spinning = false; setControls(); }
+}
 // Logo in der Radmitte: Propeller-Effekt
 let hubAngle = 0;
 function setHub(deg) {
@@ -674,6 +911,7 @@ function animateWinner(ms = 1600) {
 
 async function shuffle() {
   if (state.spinning || state.pendingRating || dlg.open || !state.current) return;
+  if (viewMode() === "glass") return glassStir();
   const c = state.current; safe(() => { Sound.unlock(); Sound.shuffle(); });
   state.spinning = true; state.winnerPos = null; setControls();
   try {
@@ -851,7 +1089,10 @@ $("#jokerBtn").onclick = async () => {
   closeRating();
   try { await useJoker(s, false); } catch (e) { renderMain(); }
 };
-function closeRating() { clearInterval(state.qTimer); if (dlg.open) dlg.close(); state.drawn = null; state.winnerPos = null; drawWheel(); setControls(); }
+function closeRating() {
+  clearInterval(state.qTimer); if (dlg.open) dlg.close(); state.drawn = null; state.winnerPos = null; drawWheel(); setControls();
+  if ($("#glassCv")) glassMount();   // übersprungen: Zettel zurück ins Glas, aufgefalteten Zettel wegräumen
+}
 $("#skipBtn").onclick = closeRating;
 dlg.addEventListener("cancel", e => { e.preventDefault(); closeRating(); });
 $("#saveBtn").onclick = async () => {
