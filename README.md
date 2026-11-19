@@ -1,6 +1,6 @@
 # LRM – Lesson Recap Management
 
-Wiederholung im Unterricht: Ziehung per Glücksrad, Karteikarte, Slotmachine oder Glaskugel – mit Bewertung, Fragen, Fächern und Teamteaching.
+Wiederholung im Unterricht: Ziehung per Glücksrad, Karteikarte, Slotmachine, Glaskugel oder Sack – mit Bewertung, Fragen, Fächern und Teamteaching.
 (Projekt- und Containername bleiben `gluecksrad`.)
 
 ## Starten
@@ -73,12 +73,14 @@ Update: `podman build --format docker -t gluecksrad .` und `systemctl --user res
   **🛡 freigestellt** (z. B. Förderunterricht) nimmt jemanden in diesem Fach **bis auf Widerruf** aus dem Rad – zurück mit „–“;
   Beginn und Ende stehen im Verlauf.
   *Abwesend* wird im Verlauf mit Datum protokolliert (Statistik „Abwesend“, auch pro Schüler/in filterbar).
-- **Ansicht: 🎡 Rad · 🗂️ Karte · 🎰 Slot · 🔮 Glas** (Umschalter unter „Drehen“, pro Fach im Browser gemerkt): Glücksrad,
+- **Tab „Ziehung“ – Ansicht: 🎡 Rad · 🗂️ Karte · 🎰 Slot · 🔮 Glas · 👝 Sack** (Umschalter unter „Drehen“, pro Fach im Browser gemerkt): Glücksrad,
   Karteikarte aus dem Stapel, Slotmachine mit einer Walze (Hebel ziehen) oder **Glaskugel-Ziehung**: gefaltete Zettel
   liegen in einer Glaskugel (ein Zettel pro Eintrag, der heute ziehbar ist), ein Greifarm holt einen heraus, vor der
-  Kamera wird er aufgefaltet; „Mischen“ rührt mit einem Kochlöffel um. Gedacht für Klassen mit ca. 30–35 Personen. Jede Ansicht hat eigene Töne
-  (Rad: einstellbares Klicken + Gewinner-Sound · Karte: Papier-Blättern · Slot: Motor, Einrasten, Jackpot-Glocken).
-  Gleiche Gewichtung (Anzahl der Einträge) und Regeln in allen drei Ansichten; Turbo beschleunigt auch Karten und Walze.
+  Kamera wird er aufgefaltet; „Mischen“ rührt mit einem Kochlöffel um. Gedacht für Klassen mit ca. 30–35 Personen.
+  **Sack**: dieselben Zettel in einem schwarzen Stoffsack mit Kordel – eine Hand greift blind hinein, wühlt (der Stoff
+  beult sich) und zieht einen Zettel, der vor der Kamera aufgefaltet wird; „Mischen“ schüttelt den Sack. Jede Ansicht hat eigene Töne
+  (Rad: einstellbares Klicken + Gewinner-Sound · Karte: Papier-Blättern · Slot: Motor, Einrasten, Jackpot-Glocken · Sack: Stoffrascheln, dumpfes Schütteln).
+  Gleiche Gewichtung (Anzahl der Einträge) und Regeln in allen Ansichten; Turbo beschleunigt auch Karten und Walze.
 - **⚡ Turbo-Modus** (Knopf neben „Drehen“, pro Fach): Rad und Töne laufen 5× schneller, nach der Ziehung erscheint eine
   Frage aus dem **Fragenpool** des Fachs (Tab „Fragen“: eine Zeile pro Frage, neue unten anhängen) – der Reihe nach,
   „andere Frage ↻“ springt eine weiter. Bewertung im Turbo: **≥ 90 %** −1 Eintrag, **30–89 %** bleibt, **< 30 %** +1.

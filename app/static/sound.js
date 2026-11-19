@@ -324,6 +324,16 @@ const Sound = (() => {
     cardShuffle() {   // Stapel wird gemischt: schnelles Papier-Rattern
       play(t => { for (let i = 0; i < 14; i++) noise(t + i * 0.035, 0.04, { vol: 0.16, type: "highpass", freq: 2500 + Math.random() * 2500, q: 0.7, attack: 0.004 }); });
     },
+    sackRustle() {   // Stoff raschelt (dumpfer als Papier), dazwischen ein Zettel
+      play(t => {
+        for (let i = 0; i < 5; i++) noise(t + i * 0.05 + Math.random() * 0.02, 0.09, { vol: 0.13, type: "bandpass", freq: 700 + Math.random() * 700, q: 0.6, attack: 0.012 });
+        noise(t + 0.12, 0.04, { vol: 0.07, type: "highpass", freq: 3500, q: 0.7, attack: 0.004 });
+      });
+    },
+    sackShake() {   // Sack wird geschüttelt: dumpfe Stöße und Rascheln
+      play(t => { for (let i = 0; i < 9; i++) { tone(95, t + i * 0.24, 0.08, { type: "sine", vol: 0.12, glideTo: 60 });
+        noise(t + i * 0.24, 0.16, { vol: 0.12, type: "bandpass", freq: 900, freqTo: 500, q: 0.6, attack: 0.01 }); } });
+    },
     cardFlip(sp = 0.5) {   // eine Karte umblättern: Papier-Wischen + leises Klopfen
       play(t => {
         noise(t, 0.07 + 0.05 * (1 - sp), { vol: 0.12 + 0.12 * sp, type: "bandpass", freq: 3200, freqTo: 1800, q: 0.8, attack: 0.006 });

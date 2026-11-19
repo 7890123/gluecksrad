@@ -477,7 +477,7 @@ table.hist tr.absent td{color:var(--bad)} table.hist tr.absent a.stud{color:inhe
 .kcount{position:absolute;bottom:0;font-size:13px}
 .pool .n small.state.exempt{color:var(--accent)}
 /* Ansicht wählen: Rad / Karte / Slot */
-.viewseg{margin-left:0}
+.viewseg{margin-left:0;flex-wrap:wrap;justify-content:center;max-width:100%}
 /* Slotmachine */
 .slotstage{position:relative;width:min(600px,100%);display:flex;align-items:center;justify-content:center;gap:10px;padding:10px 0}
 .slotmachine{flex:1;min-width:0;padding:16px 16px 30px;border-radius:26px;position:relative;
