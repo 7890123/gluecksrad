@@ -225,6 +225,8 @@ def init_db():
                 con.execute("ALTER TABLE subjects ADD COLUMN normal_last INTEGER")  # dasselbe für (2P)/(3P)-Fragen im normalen Modus
             if "q_random" not in fcols:
                 con.execute("ALTER TABLE subjects ADD COLUMN q_random INTEGER NOT NULL DEFAULT 0")  # Fragen zufällig statt der Reihe nach
+            if "pause_days" not in fcols:
+                con.execute("ALTER TABLE subjects ADD COLUMN pause_days INTEGER")  # Dauer des Aussetzens, NULL = PAUSE_DAYS
             qcols = [r[1] for r in con.execute("PRAGMA table_info(questions)")]
             if "asked_day" not in qcols:
                 con.execute("ALTER TABLE questions ADD COLUMN asked_day TEXT")   # zuletzt gestellt (JJJJ-MM-TT) – pro Tag nur 1x
@@ -286,13 +288,22 @@ def migrate_jokers(con):
     con.execute("UPDATE students SET jokers=0, joker_day=NULL WHERE jokers > 0 OR joker_day IS NOT NULL")
 
 
-def pause_until(day=None):
-    """Ende der Pause: Tag der Ziehung + PAUSE_DAYS, PAUSE_HOUR Uhr Ortszeit (als Unix-Zeit)."""
+def pause_until(day=None, days=PAUSE_DAYS):
+    """Ende der Pause: Tag der Ziehung + days (Standard PAUSE_DAYS), PAUSE_HOUR Uhr Ortszeit (als Unix-Zeit)."""
     try:
         d = date.fromisoformat(valid_day(day))
     except ApiError:
         d = datetime.now(LOCAL_TZ).date()
-    d += timedelta(days=PAUSE_DAYS)
+    return day_start(d + timedelta(days=days))
+
+
+def subject_pause_days(con, subj):
+    r = con.execute("SELECT pause_days FROM subjects WHERE id=?", (subj,)).fetchone()
+    return (r and r[0]) or PAUSE_DAYS
+
+
+def day_start(d):
+    """Ab wann ein Tag zählt: PAUSE_HOUR Uhr Ortszeit (als Unix-Zeit)."""
     return int(datetime(d.year, d.month, d.day, PAUSE_HOUR, tzinfo=LOCAL_TZ).timestamp())
 
 
@@ -434,12 +445,13 @@ def class_obj(con, cid, subj=None):
     questions = [{"id": r["id"], "text": r["text"], "sort": r["sort"], "correct": r["correct"], "done": r["done_at"],
                   "askedDay": r["asked_day"] or ""}
                  for r in con.execute("SELECT * FROM questions WHERE subject_id=? ORDER BY sort", (subj,))]
-    turbo_last, normal_last, q_random = con.execute(
-        "SELECT turbo_last, normal_last, q_random FROM subjects WHERE id=?", (subj,)).fetchone()
+    turbo_last, normal_last, q_random, pause_days = con.execute(
+        "SELECT turbo_last, normal_last, q_random, pause_days FROM subjects WHERE id=?", (subj,)).fetchone()
     return {"id": c["id"], "name": c["name"], "students": students, "subjects": subjects,
             "subject": subj, "pool": read_pool(con, subj), "pauses": pauses, "dayOut": day_out, "exempt": exempt, "history": history,
             "questions": questions, "turboLast": -1 if turbo_last is None else turbo_last,
-            "normalLast": -1 if normal_last is None else normal_last, "qRandom": bool(q_random)}
+            "normalLast": -1 if normal_last is None else normal_last, "qRandom": bool(q_random),
+            "pauseDays": pause_days or PAUSE_DAYS}
 
 
 def get_student(con, cid, sid):
@@ -913,6 +925,16 @@ def route(con, method, parts, body, user):
                 sort += 1
         return class_obj(con, cid, subj)
 
+    if rest == ["subject", "pausedays"] and method == "PUT":   # Dauer des Aussetzens (gilt für neue Pausen)
+        try:
+            days = int(body.get("days"))
+        except (TypeError, ValueError):
+            raise ApiError(400, "Ungültige Anzahl Tage")
+        if not 1 <= days <= 365:
+            raise ApiError(400, "Bitte 1 bis 365 Tage")
+        con.execute("UPDATE subjects SET pause_days=? WHERE id=?", (days, need_subject()))
+        return class_obj(con, cid, subj)
+
     if rest == ["subject", "qorder"] and method == "PUT":   # Reihenfolge: der Reihe nach / zufällig
         con.execute("UPDATE subjects SET q_random=? WHERE id=?", (1 if body.get("random") else 0, need_subject()))
         return class_obj(con, cid, subj)
@@ -959,6 +981,26 @@ def route(con, method, parts, body, user):
         if bool(was) != on:
             con.execute("INSERT INTO history (class_id, subject_id, ts, type, student_id, name, note, rated_by)"
                         " VALUES (?,?,?,'exempt',?,?,?,?)", (cid, subj, int(time.time()), s["id"], s["name"], "on" if on else "off", user["username"]))
+        return class_obj(con, cid, subj)
+
+    if len(rest) == 4 and rest[0] == "subject" and rest[1] == "students" and rest[3] == "next" and method == "PUT":
+        # nächsten Einsatz händisch setzen: bis dahin nicht im Rad, ab dem Tag (5 Uhr) wieder genau einmal.
+        # Ohne Datum oder mit einem Datum bis heute: sofort wieder einmal ins Rad.
+        s = get_student(con, cid, rest[2])
+        pool = read_pool(con, need_subject())
+        day = body.get("day") or None
+        when = day_start(date.fromisoformat(valid_day(day))) if day else 0
+        if when > time.time():
+            write_pool(con, subj, [p for p in pool if p != s["id"]])
+            con.execute("INSERT OR REPLACE INTO subject_pause VALUES (?,?,?)", (subj, s["id"], when))
+        else:
+            day = None
+            if s["id"] not in pool:
+                insert_random(pool, s["id"])
+                write_pool(con, subj, pool)
+            con.execute("DELETE FROM subject_pause WHERE subject_id=? AND student_id=?", (subj, s["id"]))
+        con.execute("INSERT INTO history (class_id, subject_id, ts, type, student_id, name, note, rated_by)"
+                    " VALUES (?,?,?,'next',?,?,?,?)", (cid, subj, int(time.time()), s["id"], s["name"], day or "", user["username"]))
         return class_obj(con, cid, subj)
 
     if len(rest) == 2 and rest[0] == "students":
@@ -1044,7 +1086,7 @@ def route(con, method, parts, body, user):
                 pool.remove(s["id"])
             if s["id"] not in pool:     # letzter Eintrag -> Pause, danach kommt er/sie wieder 1x ins Rad
                 con.execute("INSERT OR REPLACE INTO subject_pause VALUES (?,?,?)",
-                            (subj, s["id"], pause_until(body.get("day"))))
+                            (subj, s["id"], pause_until(body.get("day"), subject_pause_days(con, subj))))
         elif outcome == "added":
             insert_random(pool, s["id"])
         write_pool(con, subj, pool)

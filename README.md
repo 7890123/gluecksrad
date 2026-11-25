@@ -59,6 +59,11 @@ Update: `podman build --format docker -t gluecksrad .` und `systemctl --user res
   - **≥ 70 %** → der gezogene Eintrag fliegt raus (ein Eintrag weniger). War es der letzte, pausiert die/der Schüler/in
     **20 Tage** in diesem Fach (⏸ in der Namensliste) und kommt danach (ab **5 Uhr früh**) automatisch wieder **einmal** ins Rad.
     „+“ oder „Zurücksetzen“ beenden die Pause sofort.
+    Die **Dauer** lässt sich pro Klasse und Fach ändern (1–365 Tage): im Hinweis unter dem Rad auf „20 Tage Pause“ klicken.
+    Sie gilt für alle Lehrkräfte der Klasse und ab der nächsten Pause; laufende Pausen behalten ihr Datum.
+- **📅 Nächster Einsatz** (Knopf in der Namensliste): Datum händisch setzen – bis dahin ist die/der Schüler/in in diesem
+  Fach nicht im Rad, ab dem Tag (5 Uhr) wieder einmal. Ein laufendes Pausenende lässt sich so auch verschieben;
+  „Löschen“ im Kalender holt die Person sofort wieder ins Rad. Jede Änderung steht im Verlauf.
   - **50–69 %** → bleibt
   - **< 50 %** → zusätzlicher Eintrag an zufälliger Position
 - **Joker 🃏** (pro Fach): Jede Lehrkraft der Klasse vergibt Joker im Tab Schülerliste – „Allen +1 Joker“ für das

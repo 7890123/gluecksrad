@@ -221,7 +221,7 @@ function renderWheelTab() {
         </div>
         <div class="hint">${isTurbo()
           ? `<span><b>⚡ Turbo</b> · ${askable(true).length} Fragen heute offen</span><span><b class="g">≥ 90 %</b> −1</span><span><b class="m">30–89 %</b> bleibt</span><span><b class="r">&lt; 30 %</b> +1 im Rad</span>`
-          : `<span><b class="g">≥ 70 %</b> −1 (letzter → 20 Tage Pause)</span><span><b class="m">50–69 %</b> bleibt</span><span><b class="r">&lt; 50 %</b> +1 im Rad</span>`}<span>Leertaste = ${viewMode() === "wheel" ? "drehen" : "ziehen"}</span></div>
+          : `<span><b class="g">≥ 70 %</b> −1 (letzter → <button class="linkbtn" id="pauseDays" title="Dauer des Aussetzens für dieses Fach dieser Klasse ändern (gilt für alle Lehrkräfte, ab der nächsten Pause)">${c.pauseDays} ${c.pauseDays === 1 ? "Tag" : "Tage"} Pause</button>)</span><span><b class="m">50–69 %</b> bleibt</span><span><b class="r">&lt; 50 %</b> +1 im Rad</span>`}<span>Leertaste = ${viewMode() === "wheel" ? "drehen" : "ziehen"}</span></div>
       </div>
       <div class="side">
         ${last ? `<div class="glass panel"><h3>Zuletzt gezogen</h3>
@@ -239,6 +239,10 @@ function renderWheelTab() {
           ${c.students.length ? `<ul class="pool" data-key="${c.id}:${c.subject}">${c.students.map(s => `
             <li class="${counts[s.id] && !notToday(s) ? "" : "out"}"><span class="dot" style="background:${colorFor(s.id)}"></span>
               <span class="n" title="${esc(s.name)}">${esc(s.name)}${c.pauses[s.id] ? `<small class="state" title="Kommt am ${fmtDay(c.pauses[s.id])} wieder einmal ins Rad">⏸ bis ${fmtDay(c.pauses[s.id])}</small>` : ""}${isExempt(s) ? `<small class="state exempt" title="Freigestellt seit ${fmtDay(c.exempt[s.id])} – bleibt so, bis in der Spalte „Heute“ wieder „–“ gewählt wird">🛡 seit ${fmtDay(c.exempt[s.id])}</small>` : ""}</span>
+              <button class="btn ghost icon nextbtn ${c.pauses[s.id] ? "on" : ""}" data-next="${s.id}" title="${c.pauses[s.id]
+                ? `Nächster Einsatz: ${fmtDay(c.pauses[s.id])} – ändern oder „Löschen“ für sofort wieder ins Rad`
+                : "Nächsten Einsatz festlegen: bis dahin nicht im Rad, ab dem Tag wieder einmal"}">📅</button>
+              <input type="date" class="nextpick" data-pick="${s.id}" tabindex="-1" aria-hidden="true">
               <select class="today ${todayState(s) ? "on" : ""}" data-today="${s.id}" title="Heute nicht im Rad dieses Fachs (gilt nur heute) – „freigestellt“ gilt bis auf Widerruf${s.jokers ? ` – noch ${s.jokers} Joker` : ""}">
                 <option value="">–</option>${Object.entries(OUT_TODAY).filter(([r]) => r !== "drawn" || todayState(s) === "drawn")
                   .map(([r, l]) => `<option value="${r}" ${todayState(s) === r ? "selected" : ""}>${l}</option>`).join("")}
@@ -274,7 +278,7 @@ function renderWheelTab() {
   $("#resetBtn").onclick = async () => {
     const paused = Object.keys(state.current.pauses).length;
     if (!confirm("Rad zurücksetzen? Jede/r Schüler/in ist danach genau einmal im Rad (zufällige Reihenfolge)."
-      + (paused ? `\n\nAchtung: ${paused === 1 ? "1 laufende 20-Tage-Pause endet" : `${paused} laufende 20-Tage-Pausen enden`} dabei sofort.` : ""))) return;
+      + (paused ? `\n\nAchtung: ${paused === 1 ? "1 laufende Pause endet" : `${paused} laufende Pausen enden`} dabei sofort.` : ""))) return;
     Sound.shuffle(); setCurrent(await api("POST", subjUrl("/reset")));
   };
   $("#quickAdd").onsubmit = async e => {
@@ -287,6 +291,31 @@ function renderWheelTab() {
     if (d > 0) flashStudents([b.dataset.id]);
     setCurrent(c2);
   });
+  $("#pauseDays").onclick = async () => {
+    const v = prompt(`Wie viele Tage setzt jemand in ${currentSubject().name} aus, wenn der letzte Eintrag aus dem Rad fliegt?\n`
+      + "Gilt für diese Klasse und dieses Fach, für alle Lehrkräfte – ab der nächsten Pause (laufende Pausen bleiben).", c.pauseDays);
+    if (v === null) return;
+    const n = parseInt(v, 10);
+    if (!(n >= 1 && n <= 365)) { toast("Bitte 1 bis 365 Tage"); return; }
+    if (n === c.pauseDays) return;
+    setCurrent(await api("PUT", subjUrl("/pausedays"), { days: n }));
+    toast(`Pause in ${currentSubject().name}: ${n} ${n === 1 ? "Tag" : "Tage"}`);
+  };
+  // nächster Einsatz: Datumsauswahl am 📅-Knopf (Datum ab morgen; „Löschen“ = sofort wieder ins Rad)
+  document.querySelectorAll(".pool [data-next]").forEach(b => b.onclick = () => {
+    const inp = b.parentNode.querySelector("[data-pick]"), id = b.dataset.next;
+    const iso = d => d.toLocaleDateString("sv"), tmr = new Date(); tmr.setDate(tmr.getDate() + 1);
+    inp.min = iso(tmr);
+    inp.value = c.pauses[id] ? iso(new Date(c.pauses[id] * 1000)) : iso(new Date(pauseEnd() * 1000));
+    try { inp.showPicker(); } catch (e) {   // ältere Browser ohne showPicker()
+      const v = prompt("Nächster Einsatz (TT.MM.JJJJ) – leer lassen = sofort wieder ins Rad:", fmtDate(inp.value));
+      if (v === null) return;
+      const m = v.trim().match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+      if (v.trim() && !m) { toast("Datum bitte als TT.MM.JJJJ"); return; }
+      setNext(id, m ? `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}` : "");
+    }
+  });
+  document.querySelectorAll(".pool [data-pick]").forEach(inp => inp.onchange = () => setNext(inp.dataset.pick, inp.value));
   document.querySelectorAll(".pool [data-today]").forEach(sel => sel.onchange = async () => {
     const s = c.students.find(x => x.id === sel.dataset.today), v = sel.value;
     try {
@@ -306,6 +335,17 @@ function renderWheelTab() {
       setCurrent(await api("PUT", subjUrl(`/students/${s.id}/today`), { day: today(), reason: v || null }));
     } catch (e) { renderMain(); }
   });
+}
+
+const fmtDate = iso => iso ? iso.split("-").reverse().join(".") : "";
+async function setNext(id, day) {
+  const c = state.current, s = c.students.find(x => x.id === id); if (!s) return;
+  if (day && day <= today()) day = "";
+  if (!day && !c.pauses[id] && c.pool.includes(id)) return;   // ist ohnehin im Rad
+  try {
+    setCurrent(await api("PUT", subjUrl(`/students/${id}/next`), { day: day || null }));
+    toast(day ? `📅 ${s.name}: nächster Einsatz am ${fmtDate(day)} – bis dahin nicht im Rad` : `${s.name} ist wieder im Rad`);
+  } catch (e) { renderMain(); }
 }
 
 async function useJoker(s, ask = true) {
@@ -1060,8 +1100,8 @@ async function shuffle() {
 const dlg = $("#rateDlg"), range = $("#scoreRange");
 $("#quick").innerHTML = [0, 20, 30, 40, 50, 60, 70, 80, 90, 100].map(v => `<button class="btn" data-v="${v}">${v}</button>`).join("");
 document.querySelectorAll("#quick button").forEach(b => b.onclick = () => { Sound.click(); setScore(+b.dataset.v); });
-// Ende einer neuen Pause: heute + 20 Tage, 5 Uhr früh (rechnet der Server genauso)
-const pauseEnd = () => { const d = new Date(); d.setHours(5, 0, 0, 0); d.setDate(d.getDate() + 20); return Math.floor(d / 1000); };
+// Ende einer neuen Pause: heute + Pausendauer des Fachs (Standard 20 Tage), 5 Uhr früh (rechnet der Server genauso)
+const pauseEnd = () => { const d = new Date(); d.setHours(5, 0, 0, 0); d.setDate(d.getDate() + (state.current.pauseDays || 20)); return Math.floor(d / 1000); };
 function setScore(v) {
   v = Math.max(0, Math.min(100, Math.round(+v || 0)));
   range.value = v;
@@ -1071,7 +1111,7 @@ function setScore(v) {
   const last = s && o === "removed" && state.current.pool.filter(id => id === s.id).length === 1;
   box.className = "result o-" + o;
   const q = !state.qRevealAt && currentQuestion();   // erst zählen, wenn die Frage sichtbar ist
-  box.textContent = `${s ? s.name : ""} ${OUT_TEXT[o]}${last ? ` – 20 Tage Pause, ab ${fmtDay(pauseEnd())} wieder 1× im Rad` : ""}`
+  box.textContent = `${s ? s.name : ""} ${OUT_TEXT[o]}${last ? ` – ${state.current.pauseDays} ${state.current.pauseDays === 1 ? "Tag" : "Tage"} Pause, ab ${fmtDay(pauseEnd())} wieder 1× im Rad` : ""}`
     + (q ? ` · Frage ${v >= Q_OK ? `richtig (${q.correct + 1}/${Q_DONE})${q.correct + 1 >= Q_DONE ? " – kommt ins Archiv" : ""}` : "nicht richtig"}` : "");
 }
 range.oninput = () => setScore(range.value);
@@ -1418,6 +1458,10 @@ function renderHistoryTab() {
     : h.type === "exempt"
     ? `<tr class="${h.note === "on" ? "absent" : ""}"><td class="nowrap">${fmt(h.ts)}${team && h.by ? `<div class="muted small">${esc(h.by)}</div>` : ""}</td>
         <td><a href="#" class="stud" data-stud="${h.studentId}">${esc(h.name)}</a></td><td colspan="3">${h.note === "on" ? "🛡 freigestellt – nicht im Rad dieses Fachs" : "✓ Freistellung aufgehoben – wieder im Rad"}</td></tr>`
+    : h.type === "next"
+    ? `<tr><td class="nowrap">${fmt(h.ts)}${team && h.by ? `<div class="muted small">${esc(h.by)}</div>` : ""}</td>
+        <td><a href="#" class="stud" data-stud="${h.studentId}">${esc(h.name)}</a></td><td colspan="3" class="muted">${h.note
+          ? `📅 nächster Einsatz händisch auf ${absDay(h.note)} gesetzt – bis dahin nicht im Rad` : "📅 nächster Einsatz: sofort – wieder im Rad"}</td></tr>`
     : h.type === "absent"
     ? `<tr class="absent"><td class="nowrap">${fmt(h.ts)}${team && h.by ? `<div class="muted small">${esc(h.by)}</div>` : ""}</td>
         <td><a href="#" class="stud" data-stud="${h.studentId}">${esc(h.name)}</a></td><td colspan="3">🚫 abwesend${h.note ? ` am ${absDay(h.note)}` : ""}</td></tr>`
