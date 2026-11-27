@@ -1343,7 +1343,7 @@ async function nikolaus() {
   ov.innerHTML = `<div class="nikstage"><div class="nikwalk">${NIKOLAUS_SVG}</div><div class="niksackbox">${SACK_SVG}</div>
     <div class="nikscroll"><h2>Der Nikolaus war da!</h2><p class="muted">Neue Regeln in ${esc(subjName)}</p>
       <ul><li><span>🃏</span><b>Jede und jeder bekommt einen Joker</b></li>
-        <li><span>⏸</span><b>Pause nach dem Rausfliegen: nur noch ${Math.min(before, 13)} Tage</b>${before > 13 ? `<small>statt ${before}</small>` : ""}</li></ul>
+        <li><span>🛡</span><b>Befreiung nach einer guten Antwort: nur noch ${Math.min(before, 13)} Tage</b>${before > 13 ? `<small>statt ${before}</small>` : ""}</li></ul>
       <button class="btn primary" id="nikGo">Danke, Nikolaus! 🎁</button></div></div>`;
   document.body.appendChild(ov);
   const req = api("POST", subjUrl("/nikolaus"));   // Regeln sofort speichern, auch wenn der Dialog nicht bestätigt wird
@@ -1520,7 +1520,7 @@ function renderHistoryTab() {
         <td><a href="#" class="stud" data-stud="${h.studentId}">${esc(h.name)}</a></td><td colspan="3">${h.note === "on" ? "🛡 freigestellt – nicht im Rad dieses Fachs" : "✓ Freistellung aufgehoben – wieder im Rad"}</td></tr>`
     : h.type === "nikolaus"
     ? `<tr><td class="nowrap">${fmt(h.ts)}${team && h.by ? `<div class="muted small">${esc(h.by)}</div>` : ""}</td>
-        <td colspan="4">🎁 Der Nikolaus war da: +1 Joker für alle, Pause nur noch ${esc(h.note || "13")} Tage</td></tr>`
+        <td colspan="4">🎁 Der Nikolaus war da: +1 Joker für alle, Befreiung nur noch ${esc(h.note || "13")} Tage</td></tr>`
     : h.type === "next"
     ? `<tr><td class="nowrap">${fmt(h.ts)}${team && h.by ? `<div class="muted small">${esc(h.by)}</div>` : ""}</td>
         <td><a href="#" class="stud" data-stud="${h.studentId}">${esc(h.name)}</a></td><td colspan="3" class="muted">${h.note

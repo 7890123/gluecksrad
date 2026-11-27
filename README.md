@@ -62,8 +62,8 @@ Update: `podman build --format docker -t gluecksrad .` und `systemctl --user res
     Die **Dauer** lässt sich pro Klasse und Fach ändern (1–365 Tage): im Hinweis unter dem Rad auf „20 Tage Pause“ klicken.
     Sie gilt für alle Lehrkräfte der Klasse und ab der nächsten Pause; laufende Pausen behalten ihr Datum.
 - **🎁 Nikolaus-Überraschung** (ab 10. Dezember 2026, einmalig pro Klasse und Fach): Beim ersten Drehen kommt der
-  Nikolaus mit seinem großen Sack und bringt neue Regeln – **jede/r bekommt einen Joker**, die **Pause** nach dem
-  Rausfliegen dauert nur noch **13 Tage** (war sie schon kürzer, bleibt sie). Gilt sofort für alle Lehrkräfte, steht im Verlauf.
+  Nikolaus mit seinem großen Sack und bringt neue Regeln – **jede/r bekommt einen Joker**, die **Befreiung** nach einer
+  guten Antwort dauert nur noch **13 Tage** (war sie schon kürzer, bleibt sie). Gilt sofort für alle Lehrkräfte, steht im Verlauf.
   Stichtag zum Testen per Umgebungsvariable `NIKOLAUS_DAY=JJJJ-MM-TT`.
 - **📅 Nächster Einsatz** (Knopf in der Namensliste): Datum händisch setzen – bis dahin ist die/der Schüler/in in diesem
   Fach nicht im Rad, ab dem Tag (5 Uhr) wieder einmal. Ein laufendes Pausenende lässt sich so auch verschieben;
