@@ -340,6 +340,11 @@ const Sound = (() => {
         tone(180, t + 0.02, 0.05, { type: "sine", vol: 0.06 });
       });
     },
+    jingle() {   // Schellen (Nikolaus): kurze helle Metall-Klänge mit Rauschen, unregelmäßig
+      play(t => { for (let i = 0; i < 16; i++) { const d = t + i * 0.09 + Math.random() * 0.04, f = [2637, 3136, 3520, 2960][i % 4];
+        tone(f, d, 0.18, { type: "triangle", vol: 0.05 }); tone(f * 1.51, d, 0.1, { type: "sine", vol: 0.025 });
+        noise(d, 0.05, { vol: 0.05, type: "highpass", freq: 6000, q: 0.7, attack: 0.002 }); } });
+    },
     cardReveal() {   // Karte wird aufgedeckt: kräftiges Aufklatschen + heller Akkord
       play(t => {
         noise(t, 0.12, { vol: 0.35, type: "bandpass", freq: 1400, freqTo: 600, q: 0.7, attack: 0.003 });

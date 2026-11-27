@@ -529,6 +529,7 @@ const safe = fn => { try { fn(); } catch (e) { console.warn(e); } };   // Ton-Fe
 
 function spin() {
   if (state.spinning || state.pendingRating || dlg.open || !state.current) return;
+  if (state.current.nikolaus) return nikolaus();   // erstes Drehen ab dem 10. Dezember: zuerst kommt der Nikolaus
   if (viewMode() === "card") return drawCard();
   if (viewMode() === "slot") return drawSlot();
   if (isLots()) return drawGlass();
@@ -1301,6 +1302,65 @@ function confetti(count = 120, origin) {
   cfUntil = performance.now() + 3200;               // Konfetti läuft höchstens ~3 s
   if (!cfRunning) { cfRunning = true; requestAnimationFrame(cfLoop); }
 }
+/* ---------------- Nikolaus-Überraschung ---------------- */
+// Einmalig pro Fach ab dem 10. Dezember (Server entscheidet, Flag „nikolaus“): Der Nikolaus stapft mit seinem großen Sack
+// herein, stellt ihn ab, aus dem Sack rollt eine Schriftrolle mit den neuen Regeln (+1 Joker für alle, Pause 13 Tage).
+const NIKOLAUS_SVG = `<svg class="nikfig" viewBox="0 0 240 400" aria-hidden="true">
+  <g class="nikstaff"><path d="M38 392 L38 96" stroke="#c9a03a" stroke-width="9" stroke-linecap="round"/>
+    <path d="M38 100 C38 50 92 46 92 86 C92 112 62 112 62 92 C62 80 76 78 78 88" fill="none" stroke="#e8c45c" stroke-width="9" stroke-linecap="round"/></g>
+  <path d="M70 170 Q120 148 170 170 L198 392 L42 392 Z" fill="#b3202a"/>
+  <path d="M42 392 L198 392 L196 376 L44 376 Z" fill="#f4efe6"/>
+  <path d="M110 160 L130 160 L136 392 L104 392 Z" fill="#f4efe6"/>
+  <path d="M114 230 h12 v-12 h8 v12 h12 v8 h-12 v26 h-8 v-26 h-12z" fill="#d9a531"/>
+  <path d="M70 170 Q40 200 42 262 L64 266 Q66 214 86 190 Z" fill="#9c1b24"/>
+  <circle cx="50" cy="262" r="13" fill="#f0c8a8"/>
+  <path d="M168 172 Q200 196 204 236 L184 244 Q178 210 160 196 Z" fill="#9c1b24"/>
+  <circle cx="120" cy="120" r="34" fill="#f0c8a8"/>
+  <circle cx="98" cy="128" r="8" fill="#f2a1a1" opacity=".6"/><circle cx="142" cy="128" r="8" fill="#f2a1a1" opacity=".6"/>
+  <circle cx="108" cy="114" r="4" fill="#2b2b2b"/><circle cx="132" cy="114" r="4" fill="#2b2b2b"/>
+  <path d="M100 106 q8 -6 16 0 M124 106 q8 -6 16 0" stroke="#eee" stroke-width="5" fill="none" stroke-linecap="round"/>
+  <path d="M84 126 Q82 200 120 222 Q158 200 156 126 Q146 146 120 144 Q94 146 84 126 Z" fill="#fbfbf8"/>
+  <path d="M104 140 Q120 132 136 140 Q128 150 120 146 Q112 150 104 140 Z" fill="#eceae4"/>
+  <path d="M120 136 q-6 6 0 8 q6 -2 0 -8" fill="#e9b39a"/>
+  <path d="M86 92 L120 18 L154 92 Q120 102 86 92 Z" fill="#c62832"/>
+  <path d="M86 92 Q120 102 154 92 L154 80 Q120 90 86 80 Z" fill="#e8c45c"/>
+  <path d="M120 18 L120 90" stroke="#e8c45c" stroke-width="6"/>
+  <path d="M112 50 h16 M120 42 v16" stroke="#fff3c4" stroke-width="5" stroke-linecap="round"/>
+</svg>`;
+const SACK_SVG = `<svg class="niksack" viewBox="0 0 220 230" aria-hidden="true">
+  <path d="M70 52 Q30 90 22 150 Q14 214 110 222 Q206 214 198 150 Q190 90 150 52 Z" fill="#8a5a2b"/>
+  <path d="M70 52 Q30 90 22 150 Q14 214 110 222 Q60 200 58 150 Q56 96 86 56 Z" fill="#74491f"/>
+  <path d="M40 120 Q110 140 182 118 M30 170 Q110 190 192 168" stroke="#6b4320" stroke-width="3" fill="none" opacity=".6"/>
+  <path class="niksacktop" d="M70 52 Q60 26 76 12 Q110 30 144 12 Q160 26 150 52 Z" fill="#9b6a36"/>
+  <path d="M66 54 Q110 66 154 54" stroke="#d9a531" stroke-width="7" fill="none" stroke-linecap="round"/>
+  <circle cx="110" cy="62" r="7" fill="#e8c45c"/>
+</svg>`;
+async function nikolaus() {
+  const c = state.current, subjName = currentSubject().name, before = c.pauseDays;
+  state.spinning = true; setControls();
+  const ov = document.createElement("div");
+  ov.className = "nikolaus";
+  ov.innerHTML = `<div class="nikstage"><div class="nikwalk">${NIKOLAUS_SVG}</div><div class="niksackbox">${SACK_SVG}</div>
+    <div class="nikscroll"><h2>Der Nikolaus war da!</h2><p class="muted">Neue Regeln in ${esc(subjName)}</p>
+      <ul><li><span>🃏</span><b>Jede und jeder bekommt einen Joker</b></li>
+        <li><span>⏸</span><b>Pause nach dem Rausfliegen: nur noch ${Math.min(before, 13)} Tage</b>${before > 13 ? `<small>statt ${before}</small>` : ""}</li></ul>
+      <button class="btn primary" id="nikGo">Danke, Nikolaus! 🎁</button></div></div>`;
+  document.body.appendChild(ov);
+  const req = api("POST", subjUrl("/nikolaus"));   // Regeln sofort speichern, auch wenn der Dialog nicht bestätigt wird
+  safe(() => { Sound.unlock(); Sound.jingle(); });
+  snow(9000, 140);
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+  await wait(2300); safe(() => Sound.clunk());                  // Sack wird abgestellt
+  await wait(700); safe(() => { Sound.cardReveal(); Sound.jingle(); });
+  safe(() => confetti(90, { x: innerWidth / 2, y: innerHeight * .55 }));
+  try { const c2 = await req; if (state.current && state.current.id === c2.id && state.current.subject === c2.subject) state.current = c2; }
+  catch (e) { console.warn(e); state.current.nikolaus = false; }
+  const done = () => { ov.classList.add("bye"); setTimeout(() => ov.remove(), 400); state.spinning = false; renderMain(); };
+  $("#nikGo").onclick = () => { done(); setTimeout(spin, 450); };
+  ov.onclick = e => { if (e.target === ov) done(); };
+  $("#nikGo").focus();
+}
+
 // Schneefall: zeitlich begrenzt (z. B. während der Drehung), keine Dauerlast im Leerlauf
 function snow(ms = 4000, count = 70) {
   if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
@@ -1458,6 +1518,9 @@ function renderHistoryTab() {
     : h.type === "exempt"
     ? `<tr class="${h.note === "on" ? "absent" : ""}"><td class="nowrap">${fmt(h.ts)}${team && h.by ? `<div class="muted small">${esc(h.by)}</div>` : ""}</td>
         <td><a href="#" class="stud" data-stud="${h.studentId}">${esc(h.name)}</a></td><td colspan="3">${h.note === "on" ? "🛡 freigestellt – nicht im Rad dieses Fachs" : "✓ Freistellung aufgehoben – wieder im Rad"}</td></tr>`
+    : h.type === "nikolaus"
+    ? `<tr><td class="nowrap">${fmt(h.ts)}${team && h.by ? `<div class="muted small">${esc(h.by)}</div>` : ""}</td>
+        <td colspan="4">🎁 Der Nikolaus war da: +1 Joker für alle, Pause nur noch ${esc(h.note || "13")} Tage</td></tr>`
     : h.type === "next"
     ? `<tr><td class="nowrap">${fmt(h.ts)}${team && h.by ? `<div class="muted small">${esc(h.by)}</div>` : ""}</td>
         <td><a href="#" class="stud" data-stud="${h.studentId}">${esc(h.name)}</a></td><td colspan="3" class="muted">${h.note

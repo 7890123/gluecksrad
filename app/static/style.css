@@ -551,3 +551,40 @@ table.hist tr.absent td{color:var(--bad)} table.hist tr.absent a.stud{color:inhe
 .pool .nextpick{position:absolute;right:120px;bottom:0;width:1px;height:1px;opacity:0;pointer-events:none;border:0;padding:0}
 .linkbtn{border:0;background:none;padding:0;font:inherit;color:inherit;cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px}
 .linkbtn:hover{color:var(--ink)}
+/* Nikolaus-Überraschung */
+.nikolaus{position:fixed;inset:0;z-index:9990;display:grid;place-items:center;background:rgba(6,10,24,.72);backdrop-filter:blur(4px);
+  animation:nikfade .4s ease both;overflow:hidden;padding:16px}
+.nikolaus.bye{animation:nikfade .35s ease reverse both}
+@keyframes nikfade{from{opacity:0}}
+.nikstage{position:relative;width:min(760px,100%);height:min(560px,88vh)}
+.nikwalk{position:absolute;z-index:1;left:4%;bottom:0;width:min(230px,34%);animation:nikwalk 2.2s cubic-bezier(.3,.7,.4,1) both}
+.nikfig{width:100%;display:block;filter:drop-shadow(0 18px 24px rgba(0,0,0,.5));animation:nikbob .36s ease-in-out 6 alternate}
+@keyframes nikwalk{from{transform:translateX(-120vw)}}
+@keyframes nikbob{to{transform:translateY(-8px) rotate(1.5deg)}}
+.niksackbox{position:absolute;z-index:0;left:33%;bottom:0;width:min(290px,40%);animation:niksack 3s ease both;transform-origin:50% 100%}
+.niksack{width:100%;display:block;filter:drop-shadow(0 14px 18px rgba(0,0,0,.45))}
+/* großer Sack über der Schulter (hinter dem Rücken) mitgetragen, dann neben den Nikolaus gestellt (federt nach) */
+@keyframes niksack{0%{transform:translate(calc(-120vw - 48%),-58%) rotate(-16deg)}
+  73%{transform:translate(-48%,-58%) rotate(-16deg)}
+  80%{transform:translate(0,0) rotate(4deg) scaleY(.88)}
+  86%{transform:translate(0,-3%) rotate(0) scaleY(1.04)}
+  100%{transform:none}}
+.niksacktop{transform-box:fill-box;transform-origin:50% 100%;animation:niktop .5s ease 2.9s both}
+@keyframes niktop{to{transform:scaleY(1.6) scaleX(1.25)}}
+.nikscroll{position:absolute;right:0;top:4%;width:min(420px,60%);padding:22px 24px 20px;border-radius:14px;color:#3a2a12;
+  background:linear-gradient(180deg,#fff7e2,#f3e2b8);box-shadow:0 24px 50px rgba(0,0,0,.5),inset 0 0 0 2px rgba(150,110,40,.25);
+  transform-origin:30% 100%;animation:nikscroll .9s cubic-bezier(.2,1.3,.4,1) 3.05s both}
+@keyframes nikscroll{from{transform:translate(-55%,60%) scale(.15) rotate(-8deg);opacity:0}}
+.nikscroll::before,.nikscroll::after{content:"";position:absolute;left:-6px;right:-6px;height:14px;border-radius:8px;background:linear-gradient(180deg,#d8b26a,#a87c34)}
+.nikscroll::before{top:-7px}.nikscroll::after{bottom:-7px}
+.nikscroll h2{margin:0;font-size:clamp(22px,4vw,32px);color:#b3202a}
+.nikscroll .muted{color:#7a6440;margin:2px 0 12px}
+.nikscroll ul{list-style:none;margin:0 0 16px;padding:0;display:grid;gap:10px}
+.nikscroll li{display:grid;grid-template-columns:34px 1fr;align-items:center;gap:2px 8px;font-size:clamp(15px,2.4vw,18px)}
+.nikscroll li span{font-size:26px;grid-row:span 2}
+.nikscroll li small{color:#7a6440;text-decoration:line-through}
+.nikscroll .btn{width:100%}
+@media (max-width:620px){.nikstage{height:min(620px,92vh)}.nikscroll{left:0;right:0;width:auto;top:0}
+  .nikwalk{width:40%}.niksackbox{width:46%;left:36%}}
+@media (prefers-reduced-motion: reduce){.nikwalk,.nikfig,.niksackbox,.niksacktop,.nikscroll{animation-duration:.01s!important;animation-delay:0s!important}
+}

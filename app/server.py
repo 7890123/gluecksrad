@@ -30,6 +30,10 @@ KEEP_AT = 50     # 50–69 %  -> bleibt; < 50 % -> zusätzlicher Eintrag an zuf�
 DAY_OUT_REASONS = ("drawn", "absent", "other")   # heute dran gewesen · abwesend · außerhalb des Rads dran
 PAUSE_DAYS = 20       # letzter Eintrag mit >= 70 % entfernt -> 20 Tage Pause, danach wieder 1x im Rad
 PAUSE_HOUR = 5        # … und zwar ab 5 Uhr früh (Ortszeit)
+# Nikolaus-Überraschung: ab diesem Tag bringt der Nikolaus beim ersten Drehen in jedem Fach neue Regeln
+# (+1 Joker für alle, Pause höchstens NIKOLAUS_PAUSE Tage) – einmalig pro Fach
+NIKOLAUS_DAY = os.environ.get("NIKOLAUS_DAY", "2026-12-10")
+NIKOLAUS_PAUSE = 13
 LOCAL_TZ = ZoneInfo(os.environ.get("TZ_NAME", "Europe/Vienna"))
 TURBO_REMOVE_AT = 90   # Turbo: >= 90 % -> ein Eintrag weniger
 TURBO_ADD_BELOW = 30   # Turbo: < 30 % -> zusätzlicher Eintrag
@@ -227,6 +231,8 @@ def init_db():
                 con.execute("ALTER TABLE subjects ADD COLUMN q_random INTEGER NOT NULL DEFAULT 0")  # Fragen zufällig statt der Reihe nach
             if "pause_days" not in fcols:
                 con.execute("ALTER TABLE subjects ADD COLUMN pause_days INTEGER")  # Dauer des Aussetzens, NULL = PAUSE_DAYS
+            if "nikolaus" not in fcols:
+                con.execute("ALTER TABLE subjects ADD COLUMN nikolaus INTEGER")  # Zeitpunkt der Nikolaus-Überraschung
             qcols = [r[1] for r in con.execute("PRAGMA table_info(questions)")]
             if "asked_day" not in qcols:
                 con.execute("ALTER TABLE questions ADD COLUMN asked_day TEXT")   # zuletzt gestellt (JJJJ-MM-TT) – pro Tag nur 1x
@@ -445,13 +451,14 @@ def class_obj(con, cid, subj=None):
     questions = [{"id": r["id"], "text": r["text"], "sort": r["sort"], "correct": r["correct"], "done": r["done_at"],
                   "askedDay": r["asked_day"] or ""}
                  for r in con.execute("SELECT * FROM questions WHERE subject_id=? ORDER BY sort", (subj,))]
-    turbo_last, normal_last, q_random, pause_days = con.execute(
-        "SELECT turbo_last, normal_last, q_random, pause_days FROM subjects WHERE id=?", (subj,)).fetchone()
+    turbo_last, normal_last, q_random, pause_days, nikolaus = con.execute(
+        "SELECT turbo_last, normal_last, q_random, pause_days, nikolaus FROM subjects WHERE id=?", (subj,)).fetchone()
     return {"id": c["id"], "name": c["name"], "students": students, "subjects": subjects,
             "subject": subj, "pool": read_pool(con, subj), "pauses": pauses, "dayOut": day_out, "exempt": exempt, "history": history,
             "questions": questions, "turboLast": -1 if turbo_last is None else turbo_last,
             "normalLast": -1 if normal_last is None else normal_last, "qRandom": bool(q_random),
-            "pauseDays": pause_days or PAUSE_DAYS}
+            "pauseDays": pause_days or PAUSE_DAYS,
+            "nikolaus": not nikolaus and datetime.now(LOCAL_TZ).date().isoformat() >= NIKOLAUS_DAY}
 
 
 def get_student(con, cid, sid):
@@ -923,6 +930,18 @@ def route(con, method, parts, body, user):
             if t:
                 con.execute("INSERT INTO questions (subject_id, text, sort) VALUES (?,?,?)", (subj, t, sort))
                 sort += 1
+        return class_obj(con, cid, subj)
+
+    if rest == ["subject", "nikolaus"] and method == "POST":
+        # Nikolaus-Überraschung (einmalig pro Fach, ab NIKOLAUS_DAY): +1 Joker für alle, Pause höchstens 13 Tage
+        if datetime.now(LOCAL_TZ).date().isoformat() < NIKOLAUS_DAY:
+            raise ApiError(400, "Der Nikolaus kommt erst später")
+        days = subject_pause_days(con, need_subject())
+        if con.execute("UPDATE subjects SET nikolaus=?, pause_days=? WHERE id=? AND nikolaus IS NULL",
+                       (int(time.time()), min(days, NIKOLAUS_PAUSE), subj)).rowcount:   # nur der erste Aufruf zählt
+            add_jokers(con, "AND f.id=?", (subj,))
+            con.execute("INSERT INTO history (class_id, subject_id, ts, type, note, rated_by) VALUES (?,?,?,'nikolaus',?,?)",
+                        (cid, subj, int(time.time()), str(min(days, NIKOLAUS_PAUSE)), user["username"]))
         return class_obj(con, cid, subj)
 
     if rest == ["subject", "pausedays"] and method == "PUT":   # Dauer des Aussetzens (gilt für neue Pausen)
